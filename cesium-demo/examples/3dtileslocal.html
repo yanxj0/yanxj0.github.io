@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link href="../assets/style/base.css" rel="stylesheet" />
+    <link href="../libs/Cesium_local/Widgets/widgets.css" rel="stylesheet" />
+    <script src="../libs/Cesium_local/Cesium.js"></script>
+    <script src="../libs/dat.gui.min.js"></script>
+</head>
+
+<body>
+    <div id="cesiumContainer"></div>
+    <script>
+        Cesium.Ion.defaultAccessToken =
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYTQ2ZjdjNS1jM2E0LTQ1M2EtOWM0My1mODMzNzY3YjYzY2YiLCJpZCI6MjkzMjcsInNjb3BlcyI6WyJhc3IiLCJnYyJdLCJpYXQiOjE1OTE5NDIzNjB9.RzKlVTVDTQ9r7cqCo-PDydgUh8Frgw0Erul_BVxiS9c";
+
+        let viewer = new Cesium.Viewer("cesiumContainer", {
+            infoBox: false, shouldAnimate: true,
+            // terrain: Cesium.Terrain.fromWorldTerrain()
+        });
+        viewer.scene.debugShowFramesPerSecond = true;// 显示帧率
+        viewer.scene.globe.depthTestAgainstTerrain = true
+        // viewer.scene.globe._surface.tileProvider._debug.wireframe = true;// 三角网
+
+        const showLocalLoadPanel = () => {
+            let gui = new dat.GUI();
+            let items = gui.addFolder('加载数据文件');
+            let commonUpload = async (callback) => {
+                const res = await showDirectoryPicker();
+                const fileList = [];
+                const detalAction = async (obj) => {
+                    let res = {};
+                    if (obj.entries) {
+                        const dirs = obj.entries();
+                        for await (const entry of dirs) {
+                            res[entry[0]] = entry[1].entries ? { type: 'directory', children: await detalAction(entry[1]) } : { type: 'file', fileHandle: entry[1] };
+                        }
+                    }
+                    return res;
+                }
+                const files = await detalAction(res);
+                const rootFile = await files['tileset.json'].fileHandle.getFile()
+                callback(URL.createObjectURL(rootFile), files);
+            };
+            items.add({
+                '3dtilset': () => {
+                    commonUpload((url, files) => {
+                        Cesium.Cesium3DTileset.fromUrl(new Cesium.Resource({ url, localFiles: files })).then((tile) => {
+                            tileset = viewer.scene.primitives.add(tile);
+                            viewer.zoomTo(tileset, new Cesium.HeadingPitchRange(0.0, -0.3, 0.0));
+                        })
+                    })
+                }
+            }, '3dtilset');
+        }
+
+        showLocalLoadPanel();
+    </script>
+</body>
+
+</html>
