@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link href="../assets/style/base.css" rel="stylesheet" />
+    <link href="../libs/Cesium_local/Widgets/widgets.css" rel="stylesheet" />
+    <script src="../libs/Cesium_local/Cesium.js"></script>
+    <script src="../libs/kriging.js"></script>
+    <script src="../libs/turf.min.js"></script>
+</head>
+
+<body>
+    <div id="cesiumContainer"></div>
+    <script>
+        Cesium.Ion.defaultAccessToken =
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJlYTQ2ZjdjNS1jM2E0LTQ1M2EtOWM0My1mODMzNzY3YjYzY2YiLCJpZCI6MjkzMjcsInNjb3BlcyI6WyJhc3IiLCJnYyJdLCJpYXQiOjE1OTE5NDIzNjB9.RzKlVTVDTQ9r7cqCo-PDydgUh8Frgw0Erul_BVxiS9c";
+
+        let viewer = new Cesium.Viewer("cesiumContainer", { infoBox: false, shouldAnimate: true });
+        viewer.scene.debugShowFramesPerSecond = true;// 显示帧率
+        /* let colors = [
+            { min: 0, max: 5, color: "#A9F08E" },
+            { min: 5, max: 10, color: "#72D66B" },
+            { min: 10, max: 25, color: "#3DB83D" },
+            { min: 25, max: 50, color: "#61B7FC" },
+            { min: 50, max: 100, color: "#0001FE" },
+            { min: 100, max: 250, color: "#FD00FA" },
+            { min: 250, max: 1000, color: "#7F013E" },
+        ]; */
+
+        let params = {
+            mapCenter: [121.483101, 31.227036],
+            maxValue: 100,
+            krigingModel: 'spherical',//model还可选'gaussian','spherical',exponential
+            krigingSigma2: 0,
+            krigingAlpha: 100,
+            canvasAlpha: 0.75,//canvas图层透明度
+            colors: ["#006837", "#1a9850", "#66bd63", "#a6d96a", "#d9ef8b", "#ffffbf",
+                "#fee08b", "#fdae61", "#f46d43", "#d73027", "#a50026"],
+        };
+
+        //利用网格计算点集
+        const gridFeatureCollection = function (grid, xlim, ylim) {
+            var range = grid.zlim[1] - grid.zlim[0];
+            var i, j, x, y, z;
+            var n = grid.length;//列数
+            var m = grid[0].length;//行数
+            var pointArray = [];
+            for (i = 0; i < n; i++)
+                for (j = 0; j < m; j++) {
+                    x = (i) * grid.width + grid.xlim[0];
+                    y = (j) * grid.width + grid.ylim[0];
+                    z = (grid[i][j] - grid.zlim[0]) / range;
+                    if (z < 0.0) z = 0.0;
+                    if (z > 1.0) z = 1.0;
+                    pointArray.push(turf.point([x, y], { value: z }));
+                }
+            return pointArray;
+        }
+
+        const drawKriging = function () {
+            var KrigingRain = viewer.entities.getById('KrigingRain');
+            viewer.entities.remove(KrigingRain);
+            const [lng, lat] = params.mapCenter;
+            let lngs = [], lats = [], values = [];
+            const points = Array(300).fill(0).map(it => {
+                const _lng = lng + Math.random() * 0.1;
+                const _lat = lat + Math.random() * 0.1;
+                lngs.push(_lng);
+                lats.push(_lat);
+                values.push(Math.random() * params.maxValue);
+                return turf.point([_lng, _lat]);
+            });
+            let extent = turf.bbox({ features: points, type: 'FeatureCollection' });
+
+            if (values.length > 2) {
+                let polygons = [];
+                polygons.push([
+                    [extent[0], extent[1]], [extent[0], extent[3]],
+                    [extent[2], extent[3]], [extent[2], extent[1]]
+                ]);
+                let canvas = null;//画布
+                function getCanvas() {
+                    //1.用克里金训练一个variogram对象
+                    let variogram = kriging.train(values, lngs, lats, params.krigingModel, params.krigingSigma2, params.krigingAlpha);
+                    //2.使用刚才的variogram对象使polygons描述的地理位置内的格网元素具备不一样的预测值；
+                    let grid = kriging.grid(polygons, variogram, (extent[2] - extent[0]) / 1000);
+                    canvas = document.createElement('canvas');
+                    canvas.width = 500;
+                    canvas.height = 500;
+                    canvas.style.display = 'block';
+                    canvas.getContext('2d').globalAlpha = 1;//设置透明度
+                    //3.将得到的格网预测值渲染到canvas画布上
+                    kriging.plot(canvas, grid, [extent[0], extent[2]], [extent[1], extent[3]], params.colors);
+                    // document.body.appendChild(canvas);
+
+                    //使用turf渲染等值面/线
+                    let fc = gridFeatureCollection(grid,
+                        [extent[0], extent[2]], [extent[1], extent[3]]);
+                    var collection = turf.featureCollection(fc);
+                    var breaks = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+                    var isobands = turf.isobands(collection, breaks, { zProperty: 'value' });
+                    function sortArea(a, b) {
+                        return turf.area(b) - turf.area(a);
+                    }
+                    //按照面积对图层进行排序，规避turf的一个bug
+                    isobands.features.sort(sortArea);
+
+                    viewer.dataSources.add(Cesium.GeoJsonDataSource.load(isobands, {
+                        stroke: Cesium.Color.HOTPINK,
+                        fill: Cesium.Color.PINK,
+                    }));
+                }
+
+                getCanvas();
+                if (canvas != null) {
+                    setTimeout(() => {
+                        let KrigingObj = viewer.entities.add({
+                            id: "KrigingRain",
+                            rectangle: {
+                                coordinates: Cesium.Rectangle.fromDegrees(...extent),
+                                rotation: Cesium.Math.toRadians(45),
+                                // material: Cesium.Color.GREEN.withAlpha(0.5),
+                                extrudedHeight: 3000.0,
+                                height: 3000.0,
+                                outline: true, // height must be set for outline to display
+                                outlineColor: Cesium.Color.BLACK,
+                                material: new Cesium.ImageMaterialProperty({
+                                    image: canvas //使用贴图的方式将结果贴到面上
+                                })
+                            },
+                        });
+                    }, 8000);
+                }
+            }
+        };
+
+        drawKriging();
+        setTimeout(() => {
+            viewer.flyTo(viewer.entities.getById('KrigingRain'));
+        }, 8000);
+    </script>
+</body>
+
+</html>
