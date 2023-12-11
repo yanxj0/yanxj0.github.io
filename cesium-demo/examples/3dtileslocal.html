@@ -129,7 +129,8 @@
             items.add({
                 '3dtilset': () => {
                     commonUpload((url, files) => {
-                        Cesium.Cesium3DTileset.fromUrl(new Cesium.Resource({ url, localFiles: files }),{customShader}).then((tile) => {
+                        //Cesium.Cesium3DTileset.fromUrl(new Cesium.Resource({ url, localFiles: files }),{customShader}).then((tile) => {
+                        Cesium.Cesium3DTileset.fromUrl(new Cesium.Resource({ url, localFiles: files }),{}).then((tile) => {
                             tileset = viewer.scene.primitives.add(tile);
                             viewer.zoomTo(tileset, new Cesium.HeadingPitchRange(0.0, -0.3, 0.0));
                         })
