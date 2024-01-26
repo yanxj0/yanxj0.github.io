@@ -264,9 +264,9 @@
             offsetX,
             offsetY + pHeight * i,
             width,
-            height - pHeight * i
+            layers.length === 2 && i === 0 ? pHeight : height - pHeight * i
           );
-          ctx.putImageData(da, 0, pHeight * i);
+          ctx.putImageData(da, 0, pHeight * i - 1); // -1修复拼接白线
         });
 
         return ctx.getImageData(0, 0, width, height);
