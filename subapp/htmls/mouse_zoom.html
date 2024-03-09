@@ -1,0 +1,176 @@
+<!--
+	此示例下载自 https://echarts.apache.org/examples/zh/editor.html?c=line-marker&reset=1&edit=1&code=PYBwLglsB2AEC8sDeAoWtJgDYFMBcya6GOAHmAQOQAqOAtiDgE4CGYArkzrAMIAWLaAHNuEOGD7cewOmKGwA6jhwBrSkQC-AGiJhgwLJBAFUxDEwhCRTKi1IQAzuvTaiuEdAAmJ1-j0GAI2BSEyJ0Bz5gAHcCMCZ2HB0zADMcNk58QjN0TzYWAC19OlDs4gD4iIBlMABPXBLSsuAmT2ZqGsYqXIicT2dGjTDiX2zcsBYANQgcGORYLhZPAHloLBqCZJYsB24RszoWIQgAY3bOudrzgG1KLDEcSi1YSgCWJkoAXVg94i4HPS4PiS2QcLAAbjgAIIOACSBxEQKG6HK7AiDVKl0ylBABhqQhg_TMgyJmmBpEh9gc6IwHSxxzYOHxTBqjyGQXYXjeNQA4ixjLBNttEkMxiwCDcALIEp40BKPZ5KPoy6h8djyygAMQs6sqbB1HM-pKINQpjmpmKoYK2cuB6DsjgAMiwAjgsNT0MlmgcwGBmFQkFasAkNLAAA08QnfI3hZjTKmwK5DUzZaAsOhYgASlkk_1ZGNpVDu0AetuIovFAEYAAxPCsV2sAZlr9dgFYATLWO7AAJwfUvoA5MFQABWAYgoWUa5YTSOySBp50oB1I8tT6aoErslG-_bnC6xsmgq7TWIlYm3xMaH1nPwHbxUDvu7rLeXF84tz3BzEOJdga6xkJgkIF7XqUl4uKWyZmP-VAOtEOC5ruH63PceajK-CYtgAtF2XYAKxPE2sBdlWfazoOI5jtAE5Qeh4xvn-J5UIAFiqAADmgBy8vKgYJAQOFPOSlIEC2JqCbAWEVgAdHh3ygdkt6wBRj7Fs-OQYYmjTEO-BafhCrAiMe67PIBwE7rOZjqRpmlmY0Dg1HQQRus80AwCW1mlCEzzdlWACkaGWcQIlms8y6Rhp8mlLR_m2fZBhUMcEBMMcuB-f5sBYM6roqZZOIOBAkAwFQ_xvGAKWpQKXpsL6NjPJuK5uXJu4achIWNY0MHPKxgAbWYAnQ6hQM9WyaUg3DEMl7XhoADcKA7GA1AQOmwDsGAAAUyQcsc-VwMtACUk7HDA_ywPtDAIApNT8MVEkAPp0MArRYBJIhgNIDAudRy2UP4WBBCu21Teg-3QIdX0_addDnQITBgI9OBgFMMxLMkL04sW1FSvdy3HSAf1EIDh2igAXkUp0g8E12pOkfwSaKhQyFNRAAPQM7AgB7aoAAAmMwzhNFBJMBJScKjLdzMgSTgxzo66WjC3QEl8hAWgvCwxxqDjAMHWAsAwAAQhUfCndLEl43E7Abc0EkgEwwB6Ji13a7r_2wAbRvxKbTDm5b1u0rb0A66ieuIGt0AbVAW04GCYC7bReMGDgElYMAQjLWHEcO-gdt-4bWxYMtEiOE8yeq989PoEzsCALOJgCZioA-cqANHqgB_KYAnaaAKs2gBwKoAMP-AADpgCBkWXgANpoA2EqAF960uAJ_agCGMYAQAyAAdqgBccpXgCySkPgAhbqPY-AFjygDmRoAMhFV4AEopL7XzdEODF1Q9dcvU44IBsMcfCQsHMDLbRyF_ACrkpJbxRnaf0MQJ4mg420LAPCVY_pAA
+	⚠ 请注意，该图表不是 Apache ECharts 官方示例，而是由用户代码生成的。请注意鉴别其内容。
+-->
+<!DOCTYPE html>
+<html lang="en" style="height: 100%">
+
+<head>
+    <meta charset="utf-8">
+</head>
+
+<body style="height: 100%; margin: 0">
+    <div id="container" style="height: 100%"></div>
+
+
+    <script type="text/javascript"
+        src="https://registry.npmmirror.com/echarts/5.5.0/files/dist/echarts.min.js"></script>
+
+    <!-- Uncomment this line if you want to dataTool extension
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/5.5.0/files/dist/extension/dataTool.min.js"></script>
+  -->
+    <!-- Uncomment this line if you want to use gl extension
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts-gl/2/files/dist/echarts-gl.min.js"></script>
+  -->
+    <!-- Uncomment this line if you want to echarts-stat extension
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts-stat/latest/files/dist/ecStat.min.js"></script>
+  -->
+    <!-- Uncomment this line if you want to use map
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/4.9.0/files/map/js/china.js"></script>
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/4.9.0/files/map/js/world.js"></script>
+  -->
+    <!-- Uncomment these two lines if you want to use bmap extension
+  <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=YOUR_API_KEY"></script>
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/5.5.0/files/dist/extension/bmap.min.js"></script>
+  -->
+
+    <script type="text/javascript">
+        var dom = document.getElementById('container');
+        var myChart = echarts.init(dom, null, {
+            renderer: 'canvas',
+            useDirtyRect: false
+        });
+        var app = {};
+
+        var option;
+
+        option = {
+            title: {
+                text: 'Zoom Demo'
+            },
+            tooltip: {
+                trigger: 'axis'
+            },
+            legend: {},
+            toolbox: {
+                show: true,
+                feature: {
+                    dataZoom: {
+                        brushStyle: {
+                            borderType: 'dashed'
+                        }
+                    },
+                    dataView: { readOnly: false },
+                    magicType: { type: ['line', 'bar'] },
+                    restore: {},
+                    saveAsImage: {},
+                    brush: {
+                        type: 'polygon'
+                    }
+                }
+            },
+            xAxis: {
+                type: 'category',
+                boundaryGap: false,
+                data: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+            },
+            yAxis: {
+                type: 'value',
+                axisLabel: {
+                    formatter: '{value} °C'
+                }
+            },
+            series: [
+                {
+                    name: 'Highest',
+                    type: 'line',
+                    data: [10, 11, 13, 11, 12, 12, 9],
+                    markPoint: {
+                        data: [
+                            { type: 'max', name: 'Max' },
+                            { type: 'min', name: 'Min' }
+                        ]
+                    },
+                    markLine: {
+                        data: [{ type: 'average', name: 'Avg' }]
+                    }
+                },
+                {
+                    name: 'Lowest',
+                    type: 'line',
+                    data: [1, -2, 2, 5, 3, 2, 0],
+                    markPoint: {
+                        data: [{ name: '周最低', value: -2, xAxis: 1, yAxis: -1.5 }]
+                    },
+                    markLine: {
+                        data: [
+                            { type: 'average', name: 'Avg' },
+                            [
+                                {
+                                    symbol: 'none',
+                                    x: '90%',
+                                    yAxis: 'max'
+                                },
+                                {
+                                    symbol: 'circle',
+                                    label: {
+                                        position: 'start',
+                                        formatter: 'Max'
+                                    },
+                                    type: 'max',
+                                    name: '最高点'
+                                }
+                            ]
+                        ]
+                    }
+                }
+            ]
+        };
+        setTimeout(function () {
+            const comp = myChart._model.getComponent('toolbox');
+            const toolbox = myChart.getViewOfComponentModel(comp);
+            const datazoom = toolbox._features.dataZoom;
+
+            // 回退
+            //datazoom.onclick(datazoom.ecModel,datazoom.api,'back');
+            let x = -1;
+            // 重写放大回调
+            const onBrush = datazoom.constructor.prototype._onBrush;
+            datazoom.constructor.prototype._onBrush = function (evt) {
+                if (x === -1) {
+                    x = evt.areas[0].range[0][0];
+                }
+
+                if (evt.isEnd) {
+                    const zoomin = evt.areas[0].range[0][0] - x < 0;
+                    // 从右往左绘制返回放大前
+                    if (zoomin) {
+                        this._brushController.updateCovers([]); // 清除绘制区域
+                        this.onclick(this.ecModel, this.api, 'back');
+                    } else {
+                        onBrush.call(this, evt);
+                    }
+                    x = -1;
+                } else {
+                    onBrush.call(this, evt);
+                }
+            };
+
+            // 重写原型链方法后，需要重新创建datazoom对象。因为重写前创建的datazoom对象会执行原先的原型方法
+            // 还原
+            myChart._api.dispatchAction({
+                type: 'restore',
+                from: myChart.id
+            });
+        }, 50);
+
+
+        if (option && typeof option === 'object') {
+            myChart.setOption(option);
+        }
+
+        window.addEventListener('resize', myChart.resize);
+    </script>
+</body>
+
+</html>
