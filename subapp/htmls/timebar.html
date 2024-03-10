@@ -1,0 +1,209 @@
+<!--
+	此示例下载自 https://echarts.apache.org/examples/zh/editor.html?c=line-simple&code=DYUwLgBAzmCGBOkC8EDUA7EB3CARWYIAFAOQBMADGQCwC0FAjPQyQJQDcAUKJCOgCYQUGbHgLFyVOo1oMKbLjwj8AlgDM1QiH0G1ocRIvDKA9mAAyfLZQpdux_gVhaA2jARgANNoEBdLiYADmAqJuhaAN6cEBAAxibAJvAAXBAuJADEAMxZAJwAHLgAQiS-ntEQYCYJIYGpUTExYPAqAOatICkQJLAAHipQJOWN0AAWJlgAwmGE6GCparDAUCDDjX0DAAomKnOd9RUjYACegSCpJMC7ICSHEAC-FfdrjnAAWtUAtgdHp-fduygKn4Nyea1aLX4P0aVTq3XyAFIhncAEZmKrfbq5ChIsEVXoAQX6UFSLjuDRGlT-FwAbksAK43NYjDZQcywFEgYDQykQNRJT4EQhdIgqVhCAB8EApvJi8XQMEqKk-IC0mBw-EIRHciDQEFFEAAVMp1GpxQB6UwWPgcO68-DgenwcIAAwAJBEQiqAHRVcwmWJLECakAAZWau1aRFY9wgHq9IG9HTAAAkTE6oNH7i6uLKHnaHsz1sTtrthTzKVBxlhUs1GQXngXWQAVFSxADWFZGgOB_zrIAbRZin12SVbHa7jSrE1r8HrvMbvKggSuFmu9TGM75SxWhYLy9XADl6Z9OV05HdHjEyhVjkSBqTyQWTmdaQymfvqwsdwORleIDeMQrC0IAkmkT68ugsAqhcvTIryL7_CQKIIPBlIofAADqwJgKMFxZGhLLoMqBChOg37LL-jSLo0MqNFBMHdChHaETC1JMahQ4QBh2H8LhFwAKysTEKiEJ84bHKAG7xIkXQkPArQoUQFCeCpamsCQe68q8sCpAS8DwLAxxEPwZiWOgrAFjE3pqCowDANGVkQN6gqBEQopeBAYqSmkKjeAwvisFxsDEYKIRhBRKyXhUvicPcRiQLsIK9Fotj2JAKJgOEKDoPS9kJUqKrwAAkoIOV5cABXLiAIBlRANhcPKiorkZWjRpKFQrGAxV7PAdIOe1SBSnRTWQGJgRaElIC9KgqAQAiVrmbmjSfMckyjB43pdQA8sEZFEHRQGdCooGPnmh2UgxSFwVxIw6XpBlGSZZk2k5Iw2XZDmWXm72ue5oneN5Q3Sm9lIOmATrhC4fleUISAoON_igzE9zfbK_4jLFf62ij3jVbVtqcKNXnEWA0xzPACRteKwMUualqAEaGgDb8RUShQIkOAoKZsQnnwYDerEDriAAoqAKpzKQKL0mAVToAonUc96sCBGcAjrXZ_DPTz4v84LIDiM201gIeJggqQ7MTGwOOmNrfPemi_DHN6gQOqrmsW1g1se96YSxFcHbUz5dHqPqCYlfw4oXfjdUMN6DBGtAZy1ctIx-_rJW9f1RBh6V1tHMqnSlVoLXGXn-Yo8t9MQIA1_oszESgAI70m27ZaNzvNzALQuEKLIA65L0uy_LMRNy3Ssqzo6vAJr7c613-uEIbvTG6bEijyxrDW7PdsO07LsgG7RDr-21vHz76B-y3ge03cIfZwX4eR_uSd1RQ3q5An0cp40acID1wpZxzhHb-TQH5FxQCXaM39_zxU4BUKugBak0AHym5pABBZoAHQUKiZWyjbDuutu4gF7v3ZCg8wjD24llcebsp4zwDHg-eBsjYmzNiQEuVtlrb07rvZ2rsdBEGwdbbB59L4BxQINYat9ND3yKrnEGvIhG7EwPAJeyBuhsJAXEUAf9M5LGkYXYBz4wF1VyvlS82hKJyPQpQxRnQVFaBIDAIIJANFAOLsAJ6ZcYFcFgZwXYolybNASFAuBq11qbTCKQER7Yhj6hADSMANMJEiSkUA8UQionBJEgIaaWg4n8x0j1ZKy1QkbUQFtcAu1wroAOncYCJ0wJkl5BdGIV1YLCUaPdCA-lDLGVMtaCyoMPr2Ucj9Zyf0PKA0SZY0Z4NIa-UBnDFAU0UpzQCho7GDY7hYweNbZZs1vEcCAA
+	⚠ 请注意，该图表不是 Apache ECharts 官方示例，而是由用户代码生成的。请注意鉴别其内容。
+-->
+<!DOCTYPE html>
+<html lang="en" style="height: 100%">
+
+<head>
+  <meta charset="utf-8">
+</head>
+
+<body style="height: 100%; margin: 0">
+  <div id="bar"
+    style="color:chocolate;font-size: x-large; width: 100%;display: inline-flex;gap:5px; justify-content: center;">
+  </div>
+  <div id="container" style="height: 30%"></div>
+
+
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/5.5.0/files/dist/echarts.min.js"></script>
+
+  <!-- Uncomment this line if you want to dataTool extension
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/5.5.0/files/dist/extension/dataTool.min.js"></script>
+  -->
+  <!-- Uncomment this line if you want to use gl extension
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts-gl/2/files/dist/echarts-gl.min.js"></script>
+  -->
+  <!-- Uncomment this line if you want to echarts-stat extension
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts-stat/latest/files/dist/ecStat.min.js"></script>
+  -->
+  <!-- Uncomment this line if you want to use map
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/4.9.0/files/map/js/china.js"></script>
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/4.9.0/files/map/js/world.js"></script>
+  -->
+  <!-- Uncomment these two lines if you want to use bmap extension
+  <script type="text/javascript" src="https://api.map.baidu.com/api?v=3.0&ak=YOUR_API_KEY"></script>
+  <script type="text/javascript" src="https://registry.npmmirror.com/echarts/5.5.0/files/dist/extension/bmap.min.js"></script>
+  -->
+
+  <script type="text/javascript">
+    var dom = document.getElementById('container');
+    var myChart = echarts.init(dom, null, {
+      renderer: 'canvas',
+      useDirtyRect: false
+    });
+    var app = {};
+
+    var option;
+
+    let start = +new Date('2024-01-01');
+    let end = +new Date('2024-01-10');
+    let diff = end - start;
+    let dotLen = 200;
+
+    let data = [start, end];
+    option = {
+      color: ['#3398DB'],
+      tooltip: {
+        trigger: 'axis',
+        showContent: false,
+        axisPointer: {
+          type: 'line'
+        }
+      },
+      dataZoom: {
+        type: 'inside'
+      },
+      xAxis: [
+        {
+          type: 'value',
+          axisLabel: {
+            formatter: (i) => {
+              const time = new Date(start + (i * diff) / dotLen);
+              return `${time.toLocaleDateString()} ${time.getHours()}`;
+            }
+          },
+          axisPointer: {
+            show: true
+          },
+          axisTick: {
+            inside: true
+          },
+          minorTick: {
+            show: true
+          },
+          splitLine: { show: false },
+          splitNumber: 10
+        }
+      ],
+      yAxis: [
+        {
+          type: 'value',
+          show: false,
+          max: 5,
+          min: 0
+        }
+      ],
+      series: [
+        {
+          name: 'x',
+          type: 'bar',
+          barWidth: '3',
+          animation: false
+        },
+        {
+          name: 'back',
+          type: 'bar',
+          barWidth: '5',
+          itemStyle: { color: 'rgba(0,0,0,0)' },
+          data: Array(dotLen)
+            .fill()
+            .map((it, i) => [i, 1]),
+          animation: false
+        }
+      ]
+    };
+    let index = 0;
+    let btn = null;
+    let timerId = null;
+    let speed = 200;
+    const play = () =>
+      setInterval(() => {
+        const temp = index++ % dotLen;
+        myChart.setOption({
+          series: [
+            {
+              name: 'x',
+              data: Array(dotLen)
+                .fill()
+                .map((it, i) => {
+                  return [i, i === temp];
+                })
+            }
+          ]
+        });
+      }, speed);
+
+    const initControl = () => {
+      const barNode = document.querySelector('#bar');
+      // 播放/暂停
+      btn = document.createElement('button');
+      btn.appendChild(document.createTextNode('播放'));
+      barNode.appendChild(btn);
+      btn.onclick = () => {
+        if (timerId) {
+          btn.innerText = '播放';
+          clearInterval(timerId);
+          timerId = null;
+        } else {
+          btn.innerText = '暂停';
+          timerId = play();
+        }
+      };
+
+      // 慢进
+      let slow = document.createElement('button');
+      slow.appendChild(document.createTextNode('慢'));
+      barNode.appendChild(slow);
+      slow.onclick = () => {
+        if (timerId) {
+          speed = 1.1 * speed;
+          clearInterval(timerId);
+          timerId = play();
+        }
+      };
+      // 快进
+      let quick = document.createElement('button');
+      quick.appendChild(document.createTextNode('快'));
+      barNode.appendChild(quick);
+      quick.onclick = () => {
+        if (timerId) {
+          speed = 0.9 * speed;
+          clearInterval(timerId);
+          timerId = play();
+        }
+      };
+
+
+    };
+
+    initControl();
+
+    myChart.on('click', (evt) => {
+      if (timerId) btn.click();
+      index = evt.dataIndex;
+      myChart.setOption({
+        series: [
+          {
+            name: 'x',
+            data: Array(dotLen)
+              .fill()
+              .map((it, i) => {
+                return [i, i === index + 1];
+              })
+          }
+        ]
+      });
+      index++;
+    });
+
+
+    if (option && typeof option === 'object') {
+      myChart.setOption(option);
+    }
+
+    window.addEventListener('resize', myChart.resize);
+  </script>
+</body>
+
+</html>
