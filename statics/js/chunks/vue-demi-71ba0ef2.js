@@ -1,0 +1,1 @@
+var a=!0x1;export{a as i};
