@@ -1,0 +1,1 @@
+import{s as a}from"./has-tostringtag-8d69f99b.js";var e=Date.prototype.getDay,o=function(t){try{return e.call(t),!0}catch{return!1}},c=Object.prototype.toString,s="[object Date]",n=a(),D=function(t){return typeof t!="object"||t===null?!1:n?o(t):c.call(t)===s};export{D as i};
