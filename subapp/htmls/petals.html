@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>花瓣图生成器 (Vue)</title>
+    <style>
+      body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
+        margin: 0;
+        background-color: #f0f0f0;
+        font-family: Arial, sans-serif;
+      }
+      .controls {
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      input[type='number'] {
+        padding: 5px;
+        width: 60px;
+      }
+      button {
+        padding: 5px 10px;
+        cursor: pointer;
+        margin: 0 5px;
+      }
+      canvas {
+        border: 1px solid #ccc;
+      }
+    </style>
+
+    <!-- 引入 Vue -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      const { createApp, ref, onMounted } = window.Vue
+
+      const App = {
+        template: `
+                <div>
+                    <div class="controls">
+                        <label for="petalCount">花瓣数量（2-12）:</label>
+                        <input type="number" id="petalCount" v-model="petalCount" min="2" max="12">
+                        <button @click="drawPetals">重新生成</button>
+                        <button @click="exportGeoJSON">导出GeoJSON</button>
+                    </div>
+                    <canvas ref="canvas" width="600" height="600"></canvas>
+                </div>
+            `,
+        setup() {
+          const petalCount = ref(6) // 默认花瓣数量
+          const canvas = ref(null) // Canvas 引用
+          let ctx = null // Canvas 上下文
+          const centerLon = 0
+          const centerLat = 0
+          const pointCount = 50
+          const maxDistance = 90
+          let petalPaths = []
+          let randomPoints = []
+
+          // 将经纬度转换为 Canvas 坐标
+          const geoToCanvas = (lon, lat) => {
+            const x = ((lon + 180) / 360) * 600
+            const y = ((90 - lat) / 180) * 600
+            return { x, y }
+          }
+
+          // 生成随机经纬度点
+          const generatePoints = () => {
+            const points = []
+            for (let i = 0; i < pointCount; i++) {
+              const angle = Math.random() * 2 * Math.PI
+              const distance = Math.random() * maxDistance
+              const lon = centerLon + distance * Math.cos(angle)
+              const lat = centerLat + distance * Math.sin(angle)
+              points.push({
+                lon: Math.max(-180, Math.min(180, lon)),
+                lat: Math.max(-90, Math.min(90, lat)),
+                angle: (angle + 2 * Math.PI) % (2 * Math.PI)
+              })
+            }
+            return points
+          }
+
+          // 绘制花瓣
+          const drawPetals = () => {
+            if (!ctx) {
+              console.error('Canvas context not initialized!')
+              return
+            }
+            ctx.clearRect(0, 0, 600, 600)
+            petalPaths = []
+            randomPoints = generatePoints()
+
+            const sectorAngle = (2 * Math.PI) / petalCount.value
+            const sectors = Array(petalCount.value)
+              .fill()
+              .map(() => [])
+            randomPoints.forEach((point) => {
+              const sectorIndex = Math.floor(point.angle / sectorAngle)
+              sectors[sectorIndex].push(point)
+            })
+
+            ctx.fillStyle = 'rgba(255, 182, 193, 0.7)'
+            ctx.strokeStyle = '#ff1493'
+            ctx.lineWidth = 2
+
+            for (let i = 0; i < petalCount.value; i++) {
+              const sector = sectors[i]
+              const avgAngle = i * sectorAngle + sectorAngle / 2
+
+              let maxX = 0
+              let maxY = 0
+              if (sector.length > 0) {
+                sector.forEach((point) => {
+                  const dLon = point.lon - centerLon
+                  const dLat = point.lat - centerLat
+                  const rotatedX = dLon * Math.cos(-avgAngle) - dLat * Math.sin(-avgAngle)
+                  const rotatedY = dLon * Math.sin(-avgAngle) + dLat * Math.cos(-avgAngle)
+                  maxX = Math.max(maxX, Math.abs(rotatedX))
+                  maxY = Math.max(maxY, Math.abs(rotatedY))
+                })
+              }
+              const padding = 10
+              const a = (maxX || maxDistance * 0.5) + padding
+              const b = (maxY || maxDistance * 0.5) + padding
+
+              const path = [[centerLon, centerLat]]
+              const canvasPath = geoToCanvas(centerLon, centerLat)
+
+              ctx.beginPath()
+              ctx.moveTo(canvasPath.x, canvasPath.y)
+
+              const steps = 50
+              for (let t = 0; t <= 1; t += 1 / steps) {
+                const t2 = t * t
+                const t3 = t2 * t
+                const mt = 1 - t
+                const mt2 = mt * mt
+                const mt3 = mt2 * mt
+
+                const x = mt3 * 0 + 3 * mt2 * t * (a * 1.2) + 3 * mt * t2 * (a * 1.2) + t3 * 0
+                const y = mt3 * 0 + 3 * mt2 * t * 0 + 3 * mt * t2 * (b * 1.2) + t3 * 0
+
+                const finalLon = centerLon + x * Math.cos(avgAngle) - y * Math.sin(avgAngle)
+                const finalLat = centerLat + x * Math.sin(avgAngle) + y * Math.cos(avgAngle)
+                const canvasPoint = geoToCanvas(finalLon, finalLat)
+                ctx.lineTo(canvasPoint.x, canvasPoint.y)
+                path.push([finalLon, finalLat])
+              }
+
+              for (let t = 1; t >= 0; t -= 1 / steps) {
+                const t2 = t * t
+                const t3 = t2 * t
+                const mt = 1 - t
+                const mt2 = mt * mt
+                const mt3 = mt2 * mt
+
+                const x = mt3 * 0 + 3 * mt2 * t * (a * 1.2) + 3 * mt * t2 * (a * 1.2) + t3 * 0
+                const y = -(mt3 * 0 + 3 * mt2 * t * 0 + 3 * mt * t2 * (b * 1.2) + t3 * 0)
+
+                const finalLon = centerLon + x * Math.cos(avgAngle) - y * Math.sin(avgAngle)
+                const finalLat = centerLat + x * Math.sin(avgAngle) + y * Math.cos(avgAngle)
+                const canvasPoint = geoToCanvas(finalLon, finalLat)
+                ctx.lineTo(canvasPoint.x, canvasPoint.y)
+                path.push([finalLon, finalLat])
+              }
+
+              ctx.closePath()
+              ctx.fill()
+              ctx.stroke()
+              path.push([centerLon, centerLat])
+              petalPaths.push(path)
+            }
+
+            ctx.fillStyle = 'blue'
+            randomPoints.forEach((point) => {
+              const canvasPoint = geoToCanvas(point.lon, point.lat)
+              ctx.beginPath()
+              ctx.arc(canvasPoint.x, canvasPoint.y, 2, 0, 2 * Math.PI)
+              ctx.fill()
+            })
+
+            ctx.fillStyle = 'red'
+            const centerPoint = geoToCanvas(centerLon, centerLat)
+            ctx.beginPath()
+            ctx.arc(centerPoint.x, centerPoint.y, 5, 0, 2 * Math.PI)
+            ctx.fill()
+
+            console.log('Petals drawn successfully')
+          }
+
+          // 导出 GeoJSON
+          const exportGeoJSON = () => {
+            if (petalPaths.length === 0) {
+              alert('请先生成花瓣图！')
+              return
+            }
+
+            const geojson = {
+              type: 'FeatureCollection',
+              features: [
+                ...petalPaths.map((path, index) => ({
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Polygon',
+                    coordinates: [path]
+                  },
+                  properties: {
+                    type: 'petal',
+                    petalIndex: index
+                  }
+                })),
+                ...randomPoints.map((point, index) => ({
+                  type: 'Feature',
+                  geometry: {
+                    type: 'Point',
+                    coordinates: [point.lon, point.lat]
+                  },
+                  properties: {
+                    type: 'randomPoint',
+                    pointIndex: index
+                  }
+                }))
+              ]
+            }
+
+            const dataStr =
+              'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(geojson))
+            const downloadAnchor = document.createElement('a')
+            downloadAnchor.setAttribute('href', dataStr)
+            downloadAnchor.setAttribute('download', 'petals_and_points.geojson')
+            document.body.appendChild(downloadAnchor)
+            downloadAnchor.click()
+            downloadAnchor.remove()
+            console.log('GeoJSON exported')
+          }
+
+          // 初始化
+          onMounted(() => {
+            if (canvas.value) {
+              ctx = canvas.value.getContext('2d')
+              console.log('Canvas initialized')
+              drawPetals()
+            } else {
+              console.error('Canvas ref not found!')
+            }
+          })
+
+          return {
+            petalCount,
+            canvas,
+            drawPetals,
+            exportGeoJSON
+          }
+        }
+      }
+
+      createApp(App).mount('#app')
+    </script>
+  </body>
+</html>
