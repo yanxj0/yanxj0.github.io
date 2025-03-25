@@ -26,7 +26,7 @@
     ```powershell
     emsdk_env.bat
     # 这里使用的相对路径,根据环境调整
-    emcc spectrum.cpp -o spectrum.js -s "EXPORTED_FUNCTIONS=[\"_malloc\",\"_free\",\"_drawSpectrum\",\"_getLastData\",\"_getInputSize\",\"_getWidth\",\"_getHeight\",\"_setParameters\",\"_setLineVisibility\"]" -s "EXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\"]" -s "ALLOW_MEMORY_GROWTH=1" -O3
+    emcc spectrum.cpp -o spectrum.js -s "EXPORTED_FUNCTIONS=[\"_malloc\",\"_free\",\"_drawSpectrum\",\"_getLastData\",\"_getInputSize\",\"_getWidth\",\"_getHeight\",\"_setParameters\",\"_setLineVisibility\",\"_setBackgroundColor\",\"_setYRange\"]" -s "EXPORTED_RUNTIME_METHODS=[\"ccall\",\"cwrap\"]" -s "ALLOW_MEMORY_GROWTH=1" -O3
 3. 检查输出：
    - 成功后会生成 spectrum.js 和 spectrum.wasm。
 4. 运行：(可用其他服务器)
