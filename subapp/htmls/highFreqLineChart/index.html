@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ECharts with Wasm Multi-Line Enhanced</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="spectrum.js"></script>
+    <style>
+      #chart {
+        width: 1280px;
+        height: 720px;
+        border: 1px solid black;
+      }
+      #tooltip {
+        position: absolute;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 5px;
+        border-radius: 3px;
+        pointer-events: none;
+        display: none;
+      }
+      #selectionBox {
+        position: absolute;
+        border: 2px dashed #000;
+        background: rgba(0, 0, 255, 0.1);
+        pointer-events: none;
+        display: none;
+      }
+      #controls {
+        margin: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <label
+        ><input type="checkbox" id="line0" checked /> Real-time (Red)</label
+      >
+      <label><input type="checkbox" id="line1" checked /> Max (Green)</label>
+      <label><input type="checkbox" id="line2" checked /> Min (Blue)</label>
+      <label><input type="checkbox" id="line3" checked /> Avg (Yellow)</label>
+    </div>
+    <div id="chart"></div>
+    <div id="tooltip"></div>
+    <div id="selectionBox"></div>
+    <script>
+      Module.onRuntimeInitialized = () => {
+        const chart = echarts.init(document.getElementById("chart"));
+        const width = Module._getWidth();
+        const height = Module._getHeight();
+        const inputSize = Module._getInputSize();
+        const gridWidth = width - 80;
+        const gridHeight = height - 80;
+        const frontCanvas = document.createElement("canvas");
+        frontCanvas.width = gridWidth;
+        frontCanvas.height = gridHeight;
+        const frontCtx = frontCanvas.getContext("2d");
+
+        const option = {
+          grid: { left: 60, right: 20, top: 20, bottom: 60 },
+          xAxis: {
+            type: "value",
+            min: 0,
+            max: inputSize - 1,
+            axisLine: { lineStyle: { color: "#000" } },
+            axisTick: { show: true },
+            axisLabel: { show: true, interval: "auto" },
+          },
+          yAxis: {
+            type: "value",
+            min: -1.5,
+            max: 1.5,
+            axisLine: { lineStyle: { color: "#000" } },
+            axisTick: { show: true },
+            axisLabel: { show: true },
+          },
+          graphic: [
+            {
+              type: "image",
+              id: "spectrumImage",
+              left: 60,
+              top: 20,
+              style: {
+                image: frontCanvas,
+                width: gridWidth,
+                height: gridHeight,
+              },
+              z: -1,
+            },
+          ],
+        };
+        chart.setOption(option);
+
+        const worker = new Worker("worker.js");
+        const selectionBox = document.getElementById("selectionBox");
+        const tooltip = document.getElementById("tooltip");
+
+        const colors = [
+          255,
+          0,
+          0, // 实时线：红色
+          0,
+          255,
+          0, // 最大值：绿色
+          0,
+          0,
+          255, // 最小值：蓝色
+          255,
+          255,
+          0, // 平均值：黄色
+        ];
+        let visibility = [true, true, true, true];
+
+        worker.onmessage = (e) => {
+          const { type, data } = e.data;
+          if (type === "ready") {
+            worker.postMessage({
+              type: "init",
+              width: gridWidth,
+              height: gridHeight,
+              inputSize: inputSize,
+              colors: colors,
+              visibility: visibility,
+            });
+            Module._setParameters(gridWidth, gridHeight, inputSize);
+          } else if (type === "image") {
+            const pixelData = new Uint8ClampedArray(data.pixels);
+            const imageData = new ImageData(pixelData, gridWidth, gridHeight);
+            frontCtx.putImageData(imageData, 0, 0);
+            chart.setOption(
+              {
+                xAxis: { min: data.startIdx, max: data.endIdx },
+                graphic: [
+                  { id: "spectrumImage", style: { image: frontCanvas } },
+                ],
+              },
+              { silent: true }
+            );
+          } else if (type === "tooltip") {
+            tooltip.style.left = `${data.x + 10}px`;
+            tooltip.style.top = `${data.y + 10}px`;
+            tooltip.style.display = "block";
+            tooltip.innerHTML = data.text;
+          } else if (type === "tooltipHide") {
+            tooltip.style.display = "none";
+          }
+        };
+
+        const updateVisibility = () => {
+          visibility = [
+            document.getElementById("line0").checked,
+            document.getElementById("line1").checked,
+            document.getElementById("line2").checked,
+            document.getElementById("line3").checked,
+          ];
+          worker.postMessage({
+            type: "updateVisibility",
+            visibility: visibility,
+          });
+        };
+        document
+          .getElementById("line0")
+          .addEventListener("change", updateVisibility);
+        document
+          .getElementById("line1")
+          .addEventListener("change", updateVisibility);
+        document
+          .getElementById("line2")
+          .addEventListener("change", updateVisibility);
+        document
+          .getElementById("line3")
+          .addEventListener("change", updateVisibility);
+
+        chart.getZr().on("mousewheel", (params) => {
+          worker.postMessage({
+            type: "mousewheel",
+            wheelDelta: params.wheelDelta,
+          });
+        });
+
+        chart.getZr().on("mousedown", (params) => {
+          worker.postMessage({
+            type: "mousedown",
+            button: params.event.button,
+            offsetX: params.offsetX,
+            offsetY: params.offsetY,
+          });
+          if (params.event.button === 0 || params.event.button === 2) {
+            selectionBox.style.left = `${params.offsetX}px`;
+            selectionBox.style.top = `${params.offsetY}px`;
+            selectionBox.style.width = "0px";
+            selectionBox.style.height = "0px";
+            selectionBox.style.display = "block";
+          }
+        });
+
+        chart.getZr().on("mousemove", (params) => {
+          if (
+            !params ||
+            typeof params.offsetX === "undefined" ||
+            typeof params.offsetY === "undefined"
+          ) {
+            console.error("Invalid mousemove params:", params);
+            return;
+          }
+          const xRel = params.offsetX - 60;
+          const yRel = params.offsetY - 20;
+          worker.postMessage({
+            type: "mousemove",
+            offsetX: params.offsetX,
+            offsetY: params.offsetY,
+            xRel: xRel,
+            yRel: yRel,
+            gridWidth: gridWidth,
+            gridHeight: gridHeight,
+          });
+          if (selectionBox.style.display === "block") {
+            const width = params.offsetX - parseInt(selectionBox.style.left);
+            const height = params.offsetY - parseInt(selectionBox.style.top);
+            selectionBox.style.width = `${Math.abs(width)}px`;
+            selectionBox.style.height = `${Math.abs(height)}px`;
+            selectionBox.style.left = `${Math.min(
+              parseInt(selectionBox.style.left),
+              params.offsetX
+            )}px`;
+          }
+        });
+
+        chart.getZr().on("mouseup", (params) => {
+          worker.postMessage({
+            type: "mouseup",
+            button: params.event.button,
+            offsetX: params.offsetX,
+          });
+          selectionBox.style.display = "none";
+        });
+
+        chart.getZr().on("mouseout", () => {
+          worker.postMessage({ type: "mouseout" });
+          selectionBox.style.display = "none";
+        });
+      };
+    </script>
+  </body>
+</html>
