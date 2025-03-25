@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>ECharts with Wasm Multi-Line Enhanced</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <script src="spectrum.js"></script>
+    <style>
+      #chart {
+        width: 1280px;
+        height: 720px;
+        border: 1px solid black;
+      }
+      #tooltip {
+        position: absolute;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 5px;
+        border-radius: 3px;
+        pointer-events: none;
+        display: none;
+      }
+      #selectionBox {
+        position: absolute;
+        border: 2px dashed #000;
+        background: rgba(0, 0, 255, 0.1);
+        pointer-events: none;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="chart"></div>
+    <div id="tooltip"></div>
+    <div id="selectionBox"></div>
+    <script>
+      Module.onRuntimeInitialized = () => {
+        const chart = echarts.init(document.getElementById("chart"));
+        const width = Module._getWidth();
+        const height = Module._getHeight();
+        const inputSize = Module._getInputSize();
+
+        const frontCanvas = document.createElement("canvas");
+        const backCanvas = document.createElement("canvas");
+        const gridWidth = width - 80;
+        const gridHeight = height - 80;
+        frontCanvas.width = backCanvas.width = gridWidth;
+        frontCanvas.height = backCanvas.height = gridHeight;
+        const frontCtx = frontCanvas.getContext("2d");
+        const backCtx = backCanvas.getContext("2d");
+
+        const option = {
+          animation: false,
+          grid: { left: 60, right: 20, top: 20, bottom: 60 },
+          xAxis: {
+            type: "value",
+            min: 0,
+            max: inputSize - 1,
+            axisLine: { lineStyle: { color: "#000" } },
+            axisTick: { show: true },
+            axisLabel: { show: true, interval: "auto" },
+          },
+          yAxis: {
+            type: "value",
+            min: -1.5,
+            max: 1.5,
+            axisLine: { lineStyle: { color: "#000" } },
+            axisTick: { show: true },
+            axisLabel: { show: true },
+          },
+          graphic: [
+            {
+              type: "image",
+              id: "spectrumImage",
+              left: 60,
+              top: 20,
+              style: {
+                image: frontCanvas,
+                width: gridWidth,
+                height: gridHeight,
+              },
+              z: -1,
+            },
+          ],
+        };
+        chart.setOption(option);
+
+        const drawSpectrum = Module._drawSpectrum;
+        const getLastData = Module._getLastData;
+
+        const numLines = 3;
+        const colors = new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255]);
+
+        function generateExternalData(size, lines) {
+          const data = new Float32Array(size * lines);
+          for (let l = 0; l < lines; l++) {
+            for (let i = 0; i < size; i++) {
+              data[l * size + i] =
+                Math.sin(i * (0.01 + l * 0.005)) + Math.random() * 0.2 - 0.1;
+            }
+          }
+          return data;
+        }
+
+        let startIdx = 0;
+        let endIdx = inputSize - 1;
+        const minRange = 10;
+        const maxRange = inputSize;
+        let isDragging = false;
+        let dragStartX = 0;
+        let selectionStartX = null;
+        const selectionBox = document.getElementById("selectionBox");
+
+        let lastUpdate = 0;
+        let externalData, inputPtr, colorsPtr;
+        function updateChart(timestamp) {
+          const now = Date.now();
+          if (now - lastUpdate >= 50) {
+            externalData = generateExternalData(inputSize, numLines);
+            inputPtr = Module._malloc(inputSize * numLines * 4);
+            Module.HEAPF32.set(externalData, inputPtr / 4);
+            colorsPtr = Module._malloc(colors.length);
+            Module.HEAPU8.set(colors, colorsPtr);
+
+            const pixelPtr = drawSpectrum(
+              inputPtr,
+              inputSize,
+              numLines,
+              gridWidth,
+              gridHeight,
+              startIdx,
+              endIdx,
+              colorsPtr
+            );
+            const pixelData = new Uint8ClampedArray(
+              Module.HEAPU8.buffer,
+              pixelPtr,
+              gridWidth * gridHeight * 4
+            );
+            const imageData = new ImageData(pixelData, gridWidth, gridHeight);
+            backCtx.putImageData(imageData, 0, 0);
+
+            frontCtx.clearRect(0, 0, gridWidth, gridHeight);
+            frontCtx.drawImage(backCanvas, 0, 0);
+
+            chart.setOption(
+              {
+                xAxis: { min: startIdx, max: endIdx },
+                graphic: [
+                  { id: "spectrumImage", style: { image: frontCanvas } },
+                ],
+              },
+              { silent: true }
+            );
+
+            Module._free(inputPtr);
+            Module._free(colorsPtr);
+            lastUpdate = now;
+          }
+          requestAnimationFrame(updateChart);
+        }
+
+        // 修复后的滚轮缩放
+        chart.getZr().on("mousewheel", (params) => {
+          const delta = params.wheelDelta > 0 ? -1 : 1; // 上滚缩小（-1），下滚放大（1）
+          const range = endIdx - startIdx + 1; // 注意这里加 1，确保范围计算正确
+          const zoomStep = Math.floor(range * 0.1 * delta);
+          const center = Math.floor((startIdx + endIdx) / 2);
+
+          let newRange = range + zoomStep;
+          let newStart = center - Math.floor(newRange / 2);
+          let newEnd = center + Math.floor(newRange / 2);
+
+          // 限制放大（范围变小）
+          if (delta > 0 && newRange < minRange) {
+            newRange = minRange;
+            newStart = center - Math.floor(minRange / 2);
+            newEnd = center + Math.floor(minRange / 2);
+          }
+          // 限制缩小（范围变大）
+          if (delta < 0 && newRange > maxRange) {
+            newRange = maxRange;
+            newStart = 0;
+            newEnd = maxRange - 1;
+          }
+
+          // 边界调整
+          newStart = Math.max(0, newStart);
+          newEnd = Math.min(inputSize - 1, newEnd);
+
+          // 确保范围不小于 minRange
+          if (newEnd - newStart + 1 < minRange) {
+            newStart = center - Math.floor(minRange / 2);
+            newEnd = center + Math.floor(minRange / 2);
+            newStart = Math.max(0, newStart);
+            newEnd = Math.min(inputSize - 1, newEnd);
+          }
+
+          startIdx = newStart;
+          endIdx = newEnd;
+          lastUpdate = 0;
+
+          // 调试输出
+          console.log(
+            "Delta:",
+            delta,
+            "Range:",
+            endIdx - startIdx + 1,
+            "Start:",
+            startIdx,
+            "End:",
+            endIdx
+          );
+        });
+
+        // 拖拽
+        chart.getZr().on("mousedown", (params) => {
+          if (params.event.button === 0 && !selectionStartX) {
+            isDragging = true;
+            dragStartX = params.offsetX - 60;
+          } else if (params.event.button === 0 || params.event.button === 2) {
+            selectionStartX = params.offsetX;
+            selectionBox.style.left = `${selectionStartX}px`;
+            selectionBox.style.top = `${params.offsetY}px`;
+            selectionBox.style.width = "0px";
+            selectionBox.style.height = "0px";
+            selectionBox.style.display = "block";
+          }
+        });
+
+        chart.getZr().on("mousemove", (params) => {
+          const xRel = params.offsetX - 60;
+          const yRel = params.offsetY - 20;
+
+          if (isDragging && xRel >= 0 && xRel < gridWidth) {
+            const range = endIdx - startIdx + 1;
+            const xScale = range / gridWidth;
+            const deltaX = Math.floor((dragStartX - xRel) * xScale);
+            startIdx = Math.max(
+              0,
+              Math.min(inputSize - range, startIdx + deltaX)
+            );
+            endIdx = startIdx + range - 1;
+            dragStartX = xRel;
+            lastUpdate = 0;
+          } else if (selectionStartX !== null) {
+            const width = params.offsetX - selectionStartX;
+            const height = params.offsetY - selectionBox.offsetTop;
+            selectionBox.style.width = `${Math.abs(width)}px`;
+            selectionBox.style.height = `${Math.abs(height)}px`;
+            selectionBox.style.left = `${Math.min(
+              selectionStartX,
+              params.offsetX
+            )}px`;
+          }
+
+          const chartRect = chart.getDom().getBoundingClientRect();
+          if (xRel >= 0 && xRel < gridWidth && yRel >= 0 && yRel < gridHeight) {
+            const dataPtr = getLastData();
+            const data = new Float32Array(
+              Module.HEAPF32.buffer,
+              dataPtr,
+              inputSize * numLines
+            );
+            const range = endIdx - startIdx + 1;
+            const xScale = range / gridWidth;
+            const index = Math.floor(startIdx + xRel * xScale);
+            const yMin = -1.5;
+            const yMax = 1.5;
+            const yScale = gridHeight / (yMax - yMin);
+            const yValue = yMin + (gridHeight - yRel) / yScale;
+
+            let tooltipText = `X: ${index}<br>`;
+            for (let l = 0; l < numLines; l++) {
+              const value = data[l * inputSize + index];
+              tooltipText += `Line ${l + 1} (${colors[l * 3]},${
+                colors[l * 3 + 1]
+              },${colors[l * 3 + 2]}): ${value.toFixed(4)}<br>`;
+            }
+            tooltipText += `Y: ${yValue.toFixed(4)}`;
+
+            tooltip.style.left = `${params.offsetX + 10}px`;
+            tooltip.style.top = `${params.offsetY + 10}px`;
+            tooltip.style.display = "block";
+            tooltip.innerHTML = tooltipText;
+          } else {
+            tooltip.style.display = "none";
+          }
+        });
+
+        chart.getZr().on("mouseup", (params) => {
+          if (isDragging) {
+            isDragging = false;
+          } else if (selectionStartX !== null) {
+            const xStart = Math.min(selectionStartX, params.offsetX) - 60;
+            const xEnd = Math.max(selectionStartX, params.offsetX) - 60;
+            const range = endIdx - startIdx + 1;
+            const xScale = range / gridWidth;
+
+            if (xEnd > xStart) {
+              const newStart = Math.floor(startIdx + xStart * xScale);
+              const newEnd = Math.floor(startIdx + xEnd * xScale);
+
+              if (params.event.button === 0) {
+                if (newEnd - newStart + 1 >= minRange) {
+                  startIdx = Math.max(0, newStart);
+                  endIdx = Math.min(inputSize - 1, newEnd);
+                }
+              } else if (params.event.button === 2) {
+                const zoomFactor = range / (newEnd - newStart);
+                const center = (startIdx + endIdx) / 2;
+                const newRange = Math.floor(range * zoomFactor);
+                if (newRange <= maxRange) {
+                  startIdx = Math.max(0, Math.floor(center - newRange / 2));
+                  endIdx = Math.min(
+                    inputSize - 1,
+                    Math.floor(center + newRange / 2)
+                  );
+                }
+              }
+
+              if (endIdx - startIdx + 1 < minRange) {
+                const center = (startIdx + endIdx) / 2;
+                startIdx = Math.max(0, Math.floor(center - minRange / 2));
+                endIdx = Math.min(
+                  inputSize - 1,
+                  Math.floor(center + minRange / 2)
+                );
+              }
+              if (endIdx - startIdx + 1 > maxRange) {
+                startIdx = 0;
+                endIdx = maxRange - 1;
+              }
+              lastUpdate = 0;
+            }
+            selectionBox.style.display = "none";
+            selectionStartX = null;
+          }
+        });
+
+        chart.getZr().on("mouseout", () => {
+          tooltip.style.display = "none";
+          if (isDragging) isDragging = false;
+          if (selectionStartX !== null) {
+            selectionBox.style.display = "none";
+            selectionStartX = null;
+          }
+        });
+
+        requestAnimationFrame(updateChart);
+      };
+    </script>
+  </body>
+</html>
