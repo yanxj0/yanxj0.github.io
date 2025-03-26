@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WASM Parser</title>
+  </head>
+  <body>
+    <input type="file" id="fileInput" />
+    <div id="progress"></div>
+    <script>
+      const worker = new Worker("worker.js");
+
+      worker.onmessage = (e) => {
+        if (e.data.type === "result") {
+          const { fileName, groups } = e.data;
+          const jsonContent = JSON.stringify(groups);
+          const blob = new Blob([jsonContent], { type: "application/json" });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${fileName}_parsed.json`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+        } else if (e.data.type === "error") {
+          console.error("Worker error:", e.data.error);
+          alert("解析失败: " + e.data.error);
+        } else if (e.data.type === "progress") {
+          const progress = e.data.progress !== undefined ? e.data.progress : 0;
+          document.getElementById(
+            "progress"
+          ).textContent = `Progress: ${progress.toFixed(2)}%`;
+        }
+      };
+
+      document
+        .getElementById("fileInput")
+        .addEventListener("change", (event) => {
+          const file = event.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const buffer = e.target.result;
+              worker.postMessage(
+                {
+                  type: "parse",
+                  buffer: buffer,
+                  fileName: file.name,
+                },
+                [buffer]
+              );
+            };
+            reader.readAsArrayBuffer(file);
+          }
+        });
+    </script>
+  </body>
+</html>

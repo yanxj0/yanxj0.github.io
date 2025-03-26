@@ -1,5 +1,5 @@
 importScripts('spectrum.js') // 导入编译后的 Wasm 模块
-importScripts('/statics/data/RollHeatmapData.js')
+importScripts('/statics/data/freqbin.js')
 
 // Worker 全局变量
 let startIdx = 0 // 当前显示范围的起始索引
@@ -205,7 +205,7 @@ Module.onRuntimeInitialized = () => {
       bgColor = data.bgColor.slice()
       yMin = data.yMin
       yMax = data.yMax
-      setInterval(updateChart, 200) // 每 50ms 更新一次图表
+      setInterval(updateChart, 16) // 每 50ms 更新一次图表
     } else if (type === 'updateVisibility') {
       visibility = data.visibility.slice() // 更新线的显示状态
     } else if (type === 'updateBackgroundColor') {
