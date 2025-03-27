@@ -18,6 +18,8 @@
 ## 完整操作流程
 
 1. 编写 spectrum.cpp：
+
+   - 使用之前提供的 C++ 代码（包含 updateSpectrum 和 getSize 函数）。
    - 编译：打开 CMD 或 PowerShell，导航到 spectrum.cpp 所在目录。
    - 执行调整后的命令：
 
@@ -29,3 +31,9 @@
    - 成功后会生成 spectrum.js 和 spectrum.wasm。
 4. 运行：(可用其他服务器)
    - 将 spectrum.js、spectrum.wasm 和 index.html 放在同一目录。
+   - 使用本地服务器（如 Python）运行：
+
+    ```cmd
+    python -m http.server 8000
+    ```
+    - 在浏览器访问 http://localhost:8000。

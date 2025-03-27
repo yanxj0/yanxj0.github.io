@@ -8,50 +8,120 @@
     <input type="file" id="fileInput" />
     <div id="progress"></div>
     <script>
+      // 创建 Worker 实例，用于处理文件解析
       const worker = new Worker("worker.js");
+      let totalGroups = 0; // 全局变量，跟踪总组数
+      let result = "["; // 存储解析结果的 JSON 字符串，初始为数组开头
+      let firstChunk = true; // 标志是否是第一个数据块，用于控制逗号添加
+      let fileName = ""; // 存储文件名，确保下载时使用正确名称
 
+      // Worker 消息处理函数
       worker.onmessage = (e) => {
-        if (e.data.type === "result") {
-          const { fileName, groups } = e.data;
-          const jsonContent = JSON.stringify(groups);
-          const blob = new Blob([jsonContent], { type: "application/json" });
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${fileName}_parsed.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          window.URL.revokeObjectURL(url);
-        } else if (e.data.type === "error") {
-          console.error("Worker error:", e.data.error);
-          alert("解析失败: " + e.data.error);
+        if (e.data.type === "group") {
+          // 处理单个数据组
+          if (!firstChunk) result += ","; // 非首组前加逗号
+          result += e.data.data; // 添加组数据
+          firstChunk = false; // 更新标志
+          totalGroups = e.data.total_groups; // 更新总组数
         } else if (e.data.type === "progress") {
+          // 更新进度显示
           const progress = e.data.progress !== undefined ? e.data.progress : 0;
           document.getElementById(
             "progress"
           ).textContent = `Progress: ${progress.toFixed(2)}%`;
+        } else if (e.data.type === "complete") {
+          // 处理解析完成
+          result += "]"; // 结束 JSON 数组
+          try {
+            const groups = JSON.parse(result); // 解析 JSON 字符串
+            const jsonContent = JSON.stringify(groups); // 转为字符串用于保存
+            const blob = new Blob([jsonContent], { type: "application/json" }); // 创建 Blob
+            const url = window.URL.createObjectURL(blob); // 生成下载链接
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${fileName}_parsed.json`; // 使用保存的文件名
+            document.body.appendChild(a);
+            a.click(); // 触发下载
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url); // 清理 URL
+          } catch (error) {
+            console.error("JSON parse error:", error.message);
+            alert("解析失败: " + error.message);
+          }
+          // 重置状态
+          result = "[";
+          firstChunk = true;
+          totalGroups = 0;
+        } else if (e.data.type === "error") {
+          // 处理错误
+          console.error("Worker error:", e.data.error);
+          alert("解析失败: " + e.data.error);
         }
       };
 
+      // 文件输入事件监听器
       document
         .getElementById("fileInput")
         .addEventListener("change", (event) => {
           const file = event.target.files[0];
           if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-              const buffer = e.target.result;
-              worker.postMessage(
-                {
-                  type: "parse",
-                  buffer: buffer,
-                  fileName: file.name,
-                },
-                [buffer]
-              );
+            fileName = file.name; // 保存文件名
+            const chunkSize = 5 * 1024 * 1024; // 每块 5MB
+            let offset = 0; // 当前文件偏移量
+            let carryOver = new Uint8Array(0); // 存储跨分片的剩余数据
+
+            // 递归读取文件分片
+            const readNextChunk = () => {
+              if (offset >= file.size && carryOver.length === 0) {
+                // 文件读取完成，发送结束消息
+                worker.postMessage({ type: "finish", fileName: file.name });
+                return;
+              }
+
+              const end = Math.min(offset + chunkSize, file.size); // 计算分片结束位置
+              const slice = file.slice(offset, end); // 切割文件分片
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                let buffer = new Uint8Array(e.target.result); // 当前分片数据
+                let combined = new Uint8Array(carryOver.length + buffer.length); // 合并剩余数据
+                combined.set(carryOver, 0);
+                combined.set(buffer, carryOver.length);
+
+                let localOffset = 0; // 本地偏移量，用于检查数据边界
+                while (localOffset + 52 <= combined.length) {
+                  // 读取 Header 中的 data_count（48 字节填充后）
+                  const dataCount = new DataView(
+                    combined.buffer,
+                    localOffset + 48,
+                    4
+                  ).getInt32(0, true);
+                  const totalSize = 52 + dataCount * 2; // 完整组大小
+                  if (localOffset + totalSize > combined.length) break; // 未完整，留到下次
+                  localOffset += totalSize;
+                }
+
+                const processedLength = localOffset; // 可处理的数据长度
+                if (processedLength > 0) {
+                  const processedBuffer = combined.slice(0, processedLength); // 提取完整数据
+                  worker.postMessage(
+                    {
+                      type: "parse",
+                      buffer: processedBuffer.buffer,
+                      offset: offset - carryOver.length, // 全局偏移量
+                      fileSize: file.size,
+                    },
+                    [processedBuffer.buffer]
+                  ); // 转移所有权，释放内存
+                }
+
+                carryOver = combined.slice(processedLength); // 保存剩余数据
+                offset = end; // 更新偏移量
+                readNextChunk(); // 读取下一块
+              };
+              reader.readAsArrayBuffer(slice);
             };
-            reader.readAsArrayBuffer(file);
+
+            readNextChunk();
           }
         });
     </script>

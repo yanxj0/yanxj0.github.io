@@ -6,5 +6,5 @@
 ```cmd
 emsdk_env.bat
 
-emcc parser.cpp -s "EXPORTED_FUNCTIONS=[\"_process_segment\", \"_parse_groups\", \"_get_result_length\", \"_malloc\", \"_free\"]" -s "EXPORTED_RUNTIME_METHODS=[\"UTF8ToString\"]" -s ALLOW_MEMORY_GROWTH=1 -s ENVIRONMENT=web -s NO_FILESYSTEM=1 -s EXPORT_ALL=0 -s USE_PTHREADS=0 -o parser.js
+emcc parser.cpp -s "EXPORTED_FUNCTIONS=[\"_process_segment\", \"_parse_groups\", \"_malloc\", \"_free\"]" -s "EXPORTED_RUNTIME_METHODS=[\"UTF8ToString\"]" -s ALLOW_MEMORY_GROWTH=1 -s ALLOW_TABLE_GROWTH=1 -s ENVIRONMENT=web -s NO_FILESYSTEM=1 -s EXPORT_ALL=0 -s USE_PTHREADS=0 -o parser.js
 ```

@@ -842,41 +842,6 @@ async function createWasm() {
   var __abort_js = () =>
       abort('native code called abort()');
 
-  var _emscripten_get_now = () => performance.now();
-  
-  var _emscripten_date_now = () => Date.now();
-  
-  var nowIsMonotonic = 1;
-  
-  var checkWasiClock = (clock_id) => clock_id >= 0 && clock_id <= 3;
-  
-  var INT53_MAX = 9007199254740992;
-  
-  var INT53_MIN = -9007199254740992;
-  var bigintToI53Checked = (num) => (num < INT53_MIN || num > INT53_MAX) ? NaN : Number(num);
-  function _clock_time_get(clk_id, ignored_precision, ptime) {
-    ignored_precision = bigintToI53Checked(ignored_precision);
-  
-  
-      if (!checkWasiClock(clk_id)) {
-        return 28;
-      }
-      var now;
-      // all wasi clocks but realtime are monotonic
-      if (clk_id === 0) {
-        now = _emscripten_date_now();
-      } else if (nowIsMonotonic) {
-        now = _emscripten_get_now();
-      } else {
-        return 52;
-      }
-      // "now" is in ms, and wasi times are in ns.
-      var nsec = Math.round(now * 1000 * 1000);
-      HEAP64[((ptime)>>3)] = BigInt(nsec);
-      return 0;
-    ;
-  }
-
   var readEmAsmArgsArray = [];
   var readEmAsmArgs = (sigPtr, buf) => {
       // Nobody should have mutated _readEmAsmArgsArray underneath us to be something else than an array.
@@ -1082,6 +1047,10 @@ async function createWasm() {
       abort('fd_close called without SYSCALLS_REQUIRE_FILESYSTEM');
     };
 
+  var INT53_MAX = 9007199254740992;
+  
+  var INT53_MIN = -9007199254740992;
+  var bigintToI53Checked = (num) => (num < INT53_MIN || num > INT53_MAX) ? NaN : Number(num);
   function _fd_seek(fd, offset, whence, newOffset) {
     offset = bigintToI53Checked(offset);
   
@@ -1133,15 +1102,12 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('fetchSettings');
 }
 var ASM_CONSTS = {
-  66672: ($0, $1, $2, $3) => { Module.onChunk(UTF8ToString($0), $1, $2, $3); },  
- 66722: ($0, $1) => { Module.onProgress($0, $1); },  
- 66753: ($0, $1) => { Module.onComplete($0, $1); }
+  66480: ($0, $1) => { Module.onGroup(UTF8ToString($0), $1); },  
+ 66522: ($0, $1) => { Module.onProgress($0, $1); }
 };
 var wasmImports = {
   /** @export */
   _abort_js: __abort_js,
-  /** @export */
-  clock_time_get: _clock_time_get,
   /** @export */
   emscripten_asm_const_int: _emscripten_asm_const_int,
   /** @export */
@@ -1156,11 +1122,10 @@ var wasmImports = {
 var wasmExports;
 createWasm();
 var ___wasm_call_ctors = createExportWrapper('__wasm_call_ctors', 0);
-var _process_segment = Module['_process_segment'] = createExportWrapper('process_segment', 5);
+var _process_segment = Module['_process_segment'] = createExportWrapper('process_segment', 3);
 var _malloc = Module['_malloc'] = createExportWrapper('malloc', 1);
-var _get_result_length = Module['_get_result_length'] = createExportWrapper('get_result_length', 1);
-var _parse_groups = Module['_parse_groups'] = createExportWrapper('parse_groups', 2);
 var _free = Module['_free'] = createExportWrapper('free', 1);
+var _parse_groups = Module['_parse_groups'] = createExportWrapper('parse_groups', 2);
 var _fflush = createExportWrapper('fflush', 1);
 var _emscripten_stack_init = () => (_emscripten_stack_init = wasmExports['emscripten_stack_init'])();
 var _emscripten_stack_get_free = () => (_emscripten_stack_get_free = wasmExports['emscripten_stack_get_free'])();
@@ -1303,6 +1268,7 @@ var missingLibrarySymbols = [
   'getCallstack',
   'convertPCtoSourceLocation',
   'getEnvStrings',
+  'checkWasiClock',
   'wasiRightsToMuslOFlags',
   'wasiOFlagsToMuslOFlags',
   'initRandomFill',
@@ -1411,7 +1377,6 @@ var unexportedSymbols = [
   'restoreOldWindowedStyle',
   'UNWIND_CACHE',
   'ExitStatus',
-  'checkWasiClock',
   'flush_NO_FILESYSTEM',
   'emSetImmediate',
   'emClearImmediate_deps',
