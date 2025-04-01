@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            margin: 50px auto;
+            perspective: 1000px;
+            user-select: none;
+        }
+
+        .menu-item {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: #3498db;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transform-style: preserve-3d;
+        }
+
+        .menu-item:hover {
+            width: 70px;
+            height: 70px;
+            background: #e74c3c;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            z-index: 5;
+        }
+
+        .selected {
+            width: 80px;
+            height: 80px;
+            background: #2ecc71;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            z-index: 10;
+        }
+
+        .light {
+            position: absolute;
+            width: 100px;
+            height: 150px;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background: radial-gradient(circle at top, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 70%);
+            pointer-events: none;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="menuContainer"></div>
+
+    <script>
+        const config = {
+            radiusX: 250, // 长轴半径 (5份)
+            radiusY: 100,  // 短轴半径 (2份，125:50 = 5:2)
+            itemCount: 8,
+            rotation: 0,
+            isDragging: false,
+            lastX: 0,
+            dragDistance: 0, // 记录单次拖拽距离
+            selectedIndex: 0 // 默认选中第0项
+        };
+
+        const container = document.getElementById('menuContainer');
+        const light = document.createElement('div');
+        light.className = 'light';
+        container.appendChild(light);
+
+        function createMenuItems() {
+            for (let i = 0; i < config.itemCount; i++) {
+                const item = document.createElement('div');
+                item.className = 'menu-item';
+                item.textContent = i + 1;
+                container.appendChild(item);
+            }
+            updatePositions();
+        }
+
+        function updatePositions() {
+            const items = document.querySelectorAll('.menu-item');
+            const angleStep = (2 * Math.PI) / (config.itemCount - 1); // 未选中项均匀分布
+            const centerX = 200;
+            const centerY = 200;
+
+            // 获取未选中项的索引
+            const unselectedItems = [];
+            for (let i = 0; i < config.itemCount; i++) {
+                if (i !== config.selectedIndex) {
+                    unselectedItems.push(i);
+                }
+            }
+
+            // 更新位置
+            items.forEach((item, index) => {
+                const isSelected = index === config.selectedIndex;
+
+                if (isSelected) {
+                    item.classList.add('selected');
+                    item.style.left = `${centerX - 40}px`; // 中心位置
+                    item.style.top = `${centerY - 40}px`;
+                    item.style.transform = `translateZ(100px)`; // 选中项突出
+                } else {
+                    item.classList.remove('selected');
+                    // 找到当前项在未选中项列表中的位置
+                    const unselectedIndex = unselectedItems.indexOf(index);
+                    // 以正下方（90度）为基准，计算基础角度
+                    const baseAngle = angleStep * unselectedIndex + Math.PI / 2;
+                    // 应用旋转偏移（以整数个 angleStep 为单位）
+                    const rotationSteps = Math.round(config.rotation / angleStep);
+                    const angle = baseAngle + rotationSteps * angleStep;
+                    
+                    // 椭圆路径计算
+                    const x = Math.cos(angle) * config.radiusX;
+                    const y = Math.sin(angle) * config.radiusY;
+                    const z = Math.sin(angle) * 50;
+
+                    item.style.left = `${centerX + x - 30}px`;
+                    item.style.top = `${centerY + y - 30}px`;
+                    item.style.transform = `translate3d(0, 0, ${z}px)`;
+                }
+            });
+        }
+
+        container.addEventListener('mousedown', (e) => {
+            config.isDragging = true;
+            config.lastX = e.clientX;
+            config.dragDistance = 0; // 重置拖拽距离
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (config.isDragging) {
+                const deltaX = e.clientX - config.lastX;
+                config.dragDistance += deltaX * 0.01; // 累积拖拽距离
+                config.lastX = e.clientX;
+                // 不实时更新位置，仅记录拖拽距离
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (config.isDragging) {
+                // 单次拖拽结束，计算旋转方向（同向拖拽）
+                const angleStep = (2 * Math.PI) / (config.itemCount - 1);
+                const rotationSteps = config.dragDistance > 0 ? -1 : 1; // 向右拖动逆时针（-1），向左拖动顺时针（+1）
+                config.rotation += rotationSteps * angleStep;
+                updatePositions();
+            }
+            config.isDragging = false;
+            config.dragDistance = 0; // 重置拖拽距离
+        });
+
+        container.addEventListener('touchstart', (e) => {
+            config.isDragging = true;
+            config.lastX = e.touches[0].clientX;
+            config.dragDistance = 0; // 重置拖拽距离
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (config.isDragging) {
+                const deltaX = e.touches[0].clientX - config.lastX;
+                config.dragDistance += deltaX * 0.01; // 累积拖拽距离
+                config.lastX = e.touches[0].clientX;
+                // 不实时更新位置，仅记录拖拽距离
+            }
+        });
+
+        document.addEventListener('touchend', () => {
+            if (config.isDragging) {
+                // 单次拖拽结束，计算旋转方向（同向拖拽）
+                const angleStep = (2 * Math.PI) / (config.itemCount - 1);
+                const rotationSteps = config.dragDistance > 0 ? -1 : 1; // 向右拖动逆时针（-1），向左拖动顺时针（+1）
+                config.rotation += rotationSteps * angleStep;
+                updatePositions();
+            }
+            config.isDragging = false;
+            config.dragDistance = 0; // 重置拖拽距离
+        });
+
+        container.addEventListener('click', (e) => {
+            if (e.target.className.includes('menu-item')) {
+                const items = Array.from(document.querySelectorAll('.menu-item'));
+                const index = items.indexOf(e.target);
+                if (index !== config.selectedIndex) {
+                    config.selectedIndex = index;
+                    updatePositions();
+                }
+            }
+        });
+
+        createMenuItems();
+    </script>
+</body>
+</html>
