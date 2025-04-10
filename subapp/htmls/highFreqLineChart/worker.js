@@ -149,13 +149,12 @@ function updateChart() {
 
   // 创建可转移缓冲区，避免拷贝开销
   const transferableBuffer = pixelData.buffer.slice(pixelPtr, pixelPtr + byteLength)
-  const transferableData = new Uint8ClampedArray(transferableBuffer)
 
   // 发送图像数据到主线程
   postMessage(
     {
       type: 'image',
-      data: { pixels: transferableData, startIdx: startIdx, endIdx: endIdx }
+      data: { pixels: transferableBuffer, startIdx: startIdx, endIdx: endIdx }
     },
     [transferableBuffer]
   )
