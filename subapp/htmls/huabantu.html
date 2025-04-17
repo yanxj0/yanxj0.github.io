@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>上海300公里范围内随机点与平滑花瓣状贝塞尔曲线</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v7.3.0/ol.css">
+    <style>
+        #map {
+            width: 100%;
+            height: 600px;
+        }
+        #regenerateButton, #exportButton {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        #regenerateButton {
+            background-color: #4CAF50;
+        }
+        #regenerateButton:hover {
+            background-color: #45a049;
+        }
+        #exportButton {
+            background-color: #008CBA;
+        }
+        #exportButton:hover {
+            background-color: #007bb5;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <button id="regenerateButton">重新生成随机点</button>
+    <button id="exportButton">导出 GeoJSON</button>
+    <script src="https://cdn.jsdelivr.net/npm/ol@v7.3.0/dist/ol.js"></script>
+    <script>
+        // 上海中心点经纬度 (WGS84坐标系)
+        const shanghai = [121.4737, 31.2304];
+        const radiusKm = 300; // 半径300公里
+        const degreePerKm = 1 / 111; // 近似1度=111公里，用于将公里转换为度
+        const radiusDeg = radiusKm * degreePerKm; // 半径转换为度
+
+        // 图层变量，用于存储点和花瓣图层
+        let pointLayer, bezierLayer;
+
+        // 初始化地图
+        const map = new ol.Map({
+            target: 'map', // 地图渲染的目标DOM元素
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM() // 使用OpenStreetMap作为底图
+                })
+            ],
+            view: new ol.View({
+                center: ol.proj.fromLonLat(shanghai), // 将WGS84坐标转换为投影坐标(EPSG:3857)
+                zoom: 8 // 初始缩放级别
+            })
+        });
+
+        // 添加300公里圆
+        const circle = new ol.geom.Circle(ol.proj.fromLonLat(shanghai), radiusDeg * 111 * 1000); // 创建300公里圆，单位米
+        const circleFeature = new ol.Feature(circle);
+        const circleLayer = new ol.layer.Vector({
+            source: new ol.source.Vector({
+                features: [circleFeature] // 包含圆的特征
+            }),
+            style: new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'blue', // 圆边框颜色
+                    width: 2 // 边框宽度
+                })
+            })
+        });
+        map.addLayer(circleLayer); // 将圆形图层添加到地图
+
+        // 添加扇形边界
+        const sectorLines = [];
+        for (let i = 0; i < 12; i++) {
+            const angle = i * 30 * Math.PI / 180; // 每个扇形30度，转换为弧度
+            const endPoint = [
+                shanghai[0] + radiusDeg * Math.cos(angle), // 扇形边界点的经度
+                shanghai[1] + radiusDeg * Math.sin(angle)  // 扇形边界点的纬度
+            ];
+            const line = new ol.geom.LineString([
+                ol.proj.fromLonLat(shanghai), // 起点(圆心)
+                ol.proj.fromLonLat(endPoint)  // 终点(边界)
+            ]);
+            sectorLines.push(new ol.Feature(line));
+        }
+        const sectorLayer = new ol.layer.Vector({
+            source: new ol.source.Vector({
+                features: sectorLines // 包含12条扇形边界的特征
+            }),
+            style: new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'black', // 扇形边界颜色
+                    width: 1,       // 边界宽度
+                    lineDash: [5, 5] // 虚线样式
+                })
+            })
+        });
+        map.addLayer(sectorLayer); // 将扇形边界图层添加到地图
+
+        // 计算四次贝塞尔曲线点
+        function bezierPoint4(t, p0, p1, p2, p3, p4) {
+            // t: 参数值 (0到1)
+            // p0-p4: 控制点坐标 [x, y]
+            const u = 1 - t;
+            const u2 = u * u;
+            const u3 = u2 * u;
+            const u4 = u3 * u;
+            const t2 = t * t;
+            const t3 = t2 * t;
+            const t4 = t3 * t;
+            return [
+                u4 * p0[0] + 4 * u3 * t * p1[0] + 6 * u2 * t2 * p2[0] + 4 * u * t3 * p3[0] + t4 * p4[0], // x坐标
+                u4 * p0[1] + 4 * u3 * t * p1[1] + 6 * u2 * t2 * p2[1] + 4 * u * t3 * p3[1] + t4 * p4[1]  // y坐标
+            ];
+        }
+
+        // 生成平滑花瓣状贝塞尔曲线
+        function createTeardropBezier(sectorPoints, center, sectorIndex, sectorCount) {
+            // sectorPoints: 扇形内的点数组
+            // center: 圆心坐标 [lon, lat]
+            // sectorIndex: 当前扇形的索引 (0到sectorCount-1)
+            // sectorCount: 总扇形数量
+            if (sectorPoints.length === 0) return null; // 空扇形返回null
+
+            const sectorAngle = 360 / sectorCount; // 每个扇形的角度 (默认12个扇形为30度)
+            const midAngle = (sectorIndex * sectorAngle + sectorAngle / 2) * Math.PI / 180; // 扇形中间角度 (弧度)
+            const minAngle = sectorIndex * sectorAngle * Math.PI / 180; // 扇形起始角度 (弧度)
+            const maxAngle = (sectorIndex + 1) * sectorAngle * Math.PI / 180; // 扇形结束角度 (弧度)
+
+            // 计算点的最远距离和最大角度偏差
+            let rawMaxR = 0; // 原始最远距离
+            let minPointAngle = maxAngle;
+            let maxPointAngle = minAngle;
+            let angleSum = 0;
+            sectorPoints.forEach(point => {
+                const dx = point[0] - center[0];
+                const dy = point[1] - center[1];
+                const r = Math.sqrt(dx * dx + dy * dy); // 点到圆心的距离
+                let angle = Math.atan2(dy, dx); // 点的角度 (弧度)
+                if (angle < 0) angle += 2 * Math.PI; // 转换为正角度
+                if (r > rawMaxR) rawMaxR = r; // 更新原始最远距离
+                if (angle < minPointAngle) minPointAngle = angle; // 更新最小角度
+                if (angle > maxPointAngle) maxPointAngle = angle; // 更新最大角度
+                angleSum += angle; // 累加角度，用于计算平均值
+            });
+
+            // 限制底部角度范围，增强圆润感
+            const anglePadding = Math.min(0.2, (maxAngle - minAngle) / 5); // 角度缓冲，约11.5度
+            const leftAngle = Math.max(minPointAngle - anglePadding, minAngle); // 左侧角度
+            const rightAngle = Math.min(maxPointAngle + anglePadding, maxAngle); // 右侧角度
+
+            // 计算底部中心点的角度，限制在中线左右20%
+            let baseMidAngle = midAngle; // 默认使用中线角度
+            if (sectorPoints.length > 0) {
+                const avgAngle = angleSum / sectorPoints.length; // 点的平均角度
+                const angleLimit = (sectorAngle * Math.PI / 180) * 0.2; // 20%的角度范围 (弧度)
+                const minAllowedAngle = midAngle - angleLimit; // 最小允许角度
+                const maxAllowedAngle = midAngle + angleLimit; // 最大允许角度
+                baseMidAngle = Math.max(minAllowedAngle, Math.min(maxAllowedAngle, avgAngle)); // 限制在范围内
+            }
+
+            // 水滴形状控制点 (2段四次贝塞尔曲线)
+            const tip = center; // 尖端在圆心
+            const baseR = rawMaxR * 1.05; // 限制最远端不超过最远点的5%
+            const midR = rawMaxR * 0.7; // 中间宽度，保持较窄
+
+            const baseMid = [
+                center[0] + baseR * Math.cos(baseMidAngle),
+                center[1] + baseR * Math.sin(baseMidAngle)
+            ];
+            const controlTipLeft = [
+                center[0] + midR * 0.05 * Math.cos(baseMidAngle + 0.2), // 基于baseMidAngle调整，减小距离
+                center[1] + midR * 0.05 * Math.sin(baseMidAngle + 0.2)
+            ];
+            const controlMidLeft = [
+                center[0] + midR * Math.cos(baseMidAngle + 0.1),
+                center[1] + midR * Math.sin(baseMidAngle + 0.1)
+            ];
+            const controlBaseLeft = [
+                center[0] + baseR * Math.cos(baseMidAngle + 0.2618), // 偏移约15°
+                center[1] + baseR * Math.sin(baseMidAngle + 0.2618)
+            ];
+            const controlTipRight = [
+                center[0] + midR * 0.05 * Math.cos(baseMidAngle - 0.2), // 基于baseMidAngle调整，减小距离
+                center[1] + midR * 0.05 * Math.sin(baseMidAngle - 0.2)
+            ];
+            const controlMidRight = [
+                center[0] + midR * Math.cos(baseMidAngle - 0.1),
+                center[1] + midR * Math.sin(baseMidAngle - 0.1)
+            ];
+            const controlBaseRight = [
+                center[0] + baseR * Math.cos(baseMidAngle - 0.2618), // 偏移约-15°
+                center[1] + baseR * Math.sin(baseMidAngle - 0.2618)
+            ];
+
+            // 生成贝塞尔曲线点 (2段四次贝塞尔曲线：尖端->底部->尖端)
+            const curvePoints = [];
+            const steps = 200; // 高采样点数以确保平滑
+            for (let t = 0; t <= 1; t += 1 / steps) {
+                const p = bezierPoint4(t, tip, controlTipLeft, controlMidLeft, controlBaseLeft, baseMid);
+                curvePoints.push(p);
+            }
+            for (let t = 0; t <= 1; t += 1 / steps) {
+                const p = bezierPoint4(t, baseMid, controlBaseRight, controlMidRight, controlTipRight, tip);
+                curvePoints.push(p);
+            }
+            curvePoints.push(tip); // 闭合曲线
+
+            return [curvePoints]; // 返回多边形坐标数组
+        }
+
+        // 生成 GeoJSON 的工具方法，仅导出花瓣图，并计算包含率
+        function generateGeoJSONFromPoints(points, center, sectorCount = 12) {
+            // points: 随机点数组 [ [lon, lat], ... ]，用于生成花瓣
+            // center: 圆心坐标 [lon, lat]
+            // sectorCount: 扇形数量 (默认12)
+
+            // 按角度分配点到扇形
+            const sectors = Array(sectorCount).fill().map(() => []);
+            points.forEach(point => {
+                const dx = point[0] - center[0];
+                const dy = point[1] - center[1];
+                let angle = Math.atan2(dy, dx) * 180 / Math.PI; // 转换为度
+                if (angle < 0) angle += 360; // 确保角度为正
+                const sectorIndex = Math.floor(angle / (360 / sectorCount)); // 计算扇形索引
+                sectors[sectorIndex].push(point);
+            });
+
+            // 生成花瓣坐标并计算包含率
+            const features = [];
+            let totalPoints = points.length;
+            let containedPoints = 0;
+
+            sectors.forEach((sectorPoints, index) => {
+                const bezierCoords = createTeardropBezier(sectorPoints, center, index, sectorCount);
+                if (bezierCoords) {
+                    const polygon = {
+                        type: 'Feature', // GeoJSON特征类型
+                        id: `petal-${index}`, // 花瓣唯一标识
+                        geometry: {
+                            type: 'Polygon', // 几何类型
+                            coordinates: [bezierCoords[0]] // 多边形坐标
+                        },
+                        properties: {} // 属性 (暂为空)
+                    };
+                    features.push(polygon);
+
+                    // 计算包含率
+                    const olPolygon = new ol.geom.Polygon(bezierCoords);
+                    let sectorContained = 0;
+                    sectorPoints.forEach(point => {
+                        const olPoint = new ol.geom.Point(point);
+                        if (olPolygon.intersectsCoordinate(point)) {
+                            sectorContained++;
+                            containedPoints++;
+                        }
+                    });
+                    console.log(`扇形 ${index}: 包含 ${sectorContained}/${sectorPoints.length} 个点`);
+                }
+            });
+
+            // 输出总包含率
+            console.log(`总包含率: ${containedPoints}/${totalPoints} (${(containedPoints / totalPoints * 100).toFixed(2)}%)`);
+
+            // 转换为 GeoJSON，仅包含花瓣
+            const geojson = {
+                type: 'FeatureCollection', // GeoJSON集合类型
+                features: features // 仅包含花瓣特征
+            };
+            return JSON.stringify(geojson, null, 2); // 格式化输出
+        }
+
+        // 生成随机点并绘制
+        function generateAndDrawPoints() {
+            // 移除旧的点和花瓣图层
+            if (pointLayer) map.removeLayer(pointLayer);
+            if (bezierLayer) map.removeLayer(bezierLayer);
+
+            // 生成100个随机点
+            const points = [];
+            for (let i = 0; i < 100; i++) {
+                const r = Math.sqrt(Math.random()) * radiusDeg; // 均匀分布半径
+                const theta = Math.random() * 2 * Math.PI; // 随机角度
+                const lon = shanghai[0] + r * Math.cos(theta); // 经度
+                const lat = shanghai[1] + r * Math.sin(theta); // 纬度
+                points.push([lon, lat]);
+            }
+
+            // 添加随机点
+            const pointFeatures = points.map((point, index) => {
+                const feature = new ol.Feature({
+                    geometry: new ol.geom.Point(ol.proj.fromLonLat(point)) // 转换为投影坐标
+                });
+                feature.setId(`point-${index}`); // 设置唯一标识
+                return feature;
+            });
+            pointLayer = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: pointFeatures
+                }),
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 3,
+                        fill: new ol.style.Fill({ color: 'blue' })
+                    })
+                })
+            });
+            map.addLayer(pointLayer);
+
+            // 使用generateGeoJSONFromPoints生成花瓣GeoJSON并渲染
+            const geojsonStr = generateGeoJSONFromPoints(points, shanghai, 12); // 获取花瓣的GeoJSON字符串
+            const format = new ol.format.GeoJSON(); // 创建GeoJSON解析器
+            const geojsonFeatures = format.readFeatures(geojsonStr, {
+                dataProjection: 'EPSG:4326', // 输入坐标系
+                featureProjection: 'EPSG:3857' // 输出投影坐标系
+            });
+            bezierLayer = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: geojsonFeatures // 使用解析的特征
+                }),
+                style: new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#FF69B4', // 粉色线条
+                        width: 2
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(255, 105, 180, 0.3)' // 浅粉色填充
+                    })
+                })
+            });
+            map.addLayer(bezierLayer);
+        }
+
+        // 导出 GeoJSON，仅包含花瓣
+        function exportGeoJSON() {
+            if (pointLayer && bezierLayer) {
+                // 获取当前随机点，用于生成花瓣
+                const points = pointLayer.getSource().getFeatures().map(f => ol.proj.transform(f.getGeometry().getCoordinates(), 'EPSG:3857', 'EPSG:4326'));
+                const geojsonStr = generateGeoJSONFromPoints(points, shanghai, 12); // 生成仅包含花瓣的GeoJSON
+                const blob = new Blob([geojsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'petals.geojson'; // 文件名改为petals.geojson
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        // 初始生成点和花瓣
+        generateAndDrawPoints();
+
+        // 绑定按钮点击事件
+        document.getElementById('regenerateButton').addEventListener('click', generateAndDrawPoints);
+        document.getElementById('exportButton').addEventListener('click', exportGeoJSON);
+    </script>
+</body>
+</html>
