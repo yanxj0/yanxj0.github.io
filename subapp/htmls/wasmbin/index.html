@@ -7,120 +7,242 @@
   <body>
     <input type="file" id="fileInput" />
     <div id="progress"></div>
+    <script src="parser.js"></script>
     <script>
-      // 创建 Worker 实例，用于处理文件解析
+      // WASM 模块
+      let wasmModule = Module;
+      // Web Worker
       const worker = new Worker("worker.js");
-      let totalGroups = 0; // 全局变量，跟踪总组数
-      let result = "["; // 存储解析结果的 JSON 字符串，初始为数组开头
-      let firstChunk = true; // 标志是否是第一个数据块，用于控制逗号添加
-      let fileName = ""; // 存储文件名，确保下载时使用正确名称
+      // 全局状态
+      let groups = []; // 存储解析的组数据
+      let totalGroups = 0; // 总组数
+      let fileName = ""; // 输入文件名
+      let chunkCount = 0; // 已处理块数
 
-      // Worker 消息处理函数
+      // 处理 Worker 消息
       worker.onmessage = (e) => {
         if (e.data.type === "group") {
-          // 处理单个数据组
-          if (!firstChunk) result += ","; // 非首组前加逗号
-          result += e.data.data; // 添加组数据
-          firstChunk = false; // 更新标志
-          totalGroups = e.data.total_groups; // 更新总组数
+          // 存储组数据
+          groups.push(e.data.data);
+          totalGroups = e.data.total_groups;
         } else if (e.data.type === "progress") {
           // 更新进度显示
-          const progress = e.data.progress !== undefined ? e.data.progress : 0;
           document.getElementById(
             "progress"
-          ).textContent = `Progress: ${progress.toFixed(2)}%`;
+          ).textContent = `Progress: ${e.data.progress.toFixed(2)}%`;
         } else if (e.data.type === "complete") {
-          // 处理解析完成
-          result += "]"; // 结束 JSON 数组
           try {
-            const groups = JSON.parse(result); // 解析 JSON 字符串
-            const jsonContent = JSON.stringify(groups); // 转为字符串用于保存
-            const blob = new Blob([jsonContent], { type: "application/json" }); // 创建 Blob
-            const url = window.URL.createObjectURL(blob); // 生成下载链接
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${fileName}_parsed.json`; // 使用保存的文件名
-            document.body.appendChild(a);
-            a.click(); // 触发下载
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url); // 清理 URL
+            if (groups.length === 0) throw new Error("No groups processed");
+            // 拼接 JSON
+            const jsonContent = "[" + groups.join(",") + "]";
+            const parsedGroups = JSON.parse(jsonContent);
+            const totalDataPoints =
+              parsedGroups.length * parsedGroups[0].length;
+            // 打印统计信息
+            console.log("Parsed groups:", parsedGroups.length, "rows");
+            console.log("Total data points:", totalDataPoints);
+            console.log("Min value:", e.data.min_value);
+            console.log("Max value:", e.data.max_value);
+
+            // 输出 JSON 文件
+            const jsonBlob = new Blob([jsonContent], {
+              type: "application/json",
+            });
+            const jsonUrl = URL.createObjectURL(jsonBlob);
+            const jsonA = document.createElement("a");
+            jsonA.href = jsonUrl;
+            jsonA.download = `${fileName}_parsed.json`;
+            document.body.appendChild(jsonA);
+            jsonA.click();
+            document.body.removeChild(jsonA);
+            URL.revokeObjectURL(jsonUrl);
+
+            // 生成 Base-58 压缩 .bin
+            const binOutput = [];
+            for (let i = 0; i < parsedGroups.length; i++) {
+              const values = new Int16Array(parsedGroups[i]);
+              // 分配 WASM 内存
+              const valuesPtr = wasmModule._malloc(values.length * 2);
+              wasmModule.HEAP16.set(values, valuesPtr / 2);
+              const outputSizePtr = wasmModule._malloc(4);
+              // 调用 Base-58 压缩
+              const binDataPtr = wasmModule._generate_base58_bin(
+                valuesPtr,
+                values.length,
+                outputSizePtr
+              );
+              const outputSize = wasmModule.HEAP32[outputSizePtr / 4];
+
+              if (binDataPtr === 0 || outputSize === 0) {
+                wasmModule._free(valuesPtr);
+                wasmModule._free(outputSizePtr);
+                throw new Error(`Base-58 generation failed for group ${i}`);
+              }
+
+              // 创建头部
+              const header = new ArrayBuffer(52);
+              const headerView = new DataView(header);
+              headerView.setInt32(48, outputSize, true);
+              const compressedData = new Uint8Array(
+                wasmModule.HEAPU8.subarray(binDataPtr, binDataPtr + outputSize)
+              );
+              binOutput.push(new Uint8Array(header));
+              binOutput.push(compressedData);
+
+              // 释放 WASM 内存
+              wasmModule._free_base58_bin(binDataPtr);
+              wasmModule._free(valuesPtr);
+              wasmModule._free(outputSizePtr);
+            }
+            // 拼接输出
+            const totalLength = binOutput.reduce(
+              (sum, arr) => sum + arr.length,
+              0
+            );
+            const binData = new Uint8Array(totalLength);
+            let offset = 0;
+            for (const arr of binOutput) {
+              binData.set(arr, offset);
+              offset += arr.length;
+            }
+            // 输出 .bin 文件
+            const binBlob = new Blob([binData], {
+              type: "application/octet-stream",
+            });
+            const binUrl = URL.createObjectURL(binBlob);
+            const binA = document.createElement("a");
+            binA.href = binUrl;
+            binA.download = `${fileName}_base58_compressed.bin`;
+            document.body.appendChild(binA);
+            binA.click();
+            document.body.removeChild(binA);
+            URL.revokeObjectURL(binUrl);
+
+            // 生成 TIFF 文件
+            const width = parsedGroups[0].length;
+            const height = parsedGroups.length;
+            console.log("TIFF dimensions:", width, "x", height);
+            // 验证组长度一致性
+            for (let i = 0; i < parsedGroups.length; i++) {
+              if (parsedGroups[i].length !== width) {
+                throw new Error(`Inconsistent group length at index ${i}`);
+              }
+            }
+            // 创建像素数组
+            const pixels = new Uint16Array(width * height);
+            for (let i = 0; i < parsedGroups.length; i++) {
+              for (let j = 0; j < parsedGroups[i].length; j++) {
+                const value = parsedGroups[i][j];
+                pixels[i * width + j] = isNaN(value) ? 0 : value + 590;
+              }
+            }
+            // 分配 WASM 内存
+            const pixelsPtr = wasmModule._malloc(pixels.length * 2);
+            wasmModule.HEAPU16.set(pixels, pixelsPtr / 2);
+            const outputSizePtr = wasmModule._malloc(4);
+            // 生成 TIFF
+            const tiffDataPtr = wasmModule._generate_tiff(
+              pixelsPtr,
+              width,
+              height,
+              outputSizePtr
+            );
+            const outputSize = wasmModule.HEAP32[outputSizePtr / 4];
+            if (tiffDataPtr === 0 || outputSize === 0) {
+              wasmModule._free(pixelsPtr);
+              wasmModule._free(outputSizePtr);
+              throw new Error("TIFF generation failed");
+            }
+            const tiffData = new Uint8Array(
+              wasmModule.HEAPU8.subarray(tiffDataPtr, tiffDataPtr + outputSize)
+            );
+            console.log("TIFF buffer size:", tiffData.length);
+            // 输出 TIFF 文件
+            const tiffBlob = new Blob([tiffData], { type: "image/tiff" });
+            const tiffUrl = URL.createObjectURL(tiffBlob);
+            const tiffA = document.createElement("a");
+            tiffA.href = tiffUrl;
+            tiffA.download = `${fileName}_parsed.tiff`;
+            document.body.appendChild(tiffA);
+            tiffA.click();
+            document.body.removeChild(tiffA);
+            URL.revokeObjectURL(tiffUrl);
+            // 释放 WASM 内存
+            wasmModule._free_tiff(tiffDataPtr);
+            wasmModule._free(pixelsPtr);
+            wasmModule._free(outputSizePtr);
           } catch (error) {
-            console.error("JSON parse error:", error.message);
-            alert("解析失败: " + error.message);
+            console.error("Error during output generation:", error.message);
+            alert("输出失败: " + error.message);
           }
           // 重置状态
-          result = "[";
-          firstChunk = true;
+          groups = [];
           totalGroups = 0;
+          chunkCount = 0;
         } else if (e.data.type === "error") {
-          // 处理错误
           console.error("Worker error:", e.data.error);
           alert("解析失败: " + e.data.error);
         }
       };
 
-      // 文件输入事件监听器
+      // 处理文件输入
       document
         .getElementById("fileInput")
         .addEventListener("change", (event) => {
           const file = event.target.files[0];
           if (file) {
-            fileName = file.name; // 保存文件名
-            const chunkSize = 5 * 1024 * 1024; // 每块 5MB
-            let offset = 0; // 当前文件偏移量
-            let carryOver = new Uint8Array(0); // 存储跨分片的剩余数据
-
-            // 递归读取文件分片
+            fileName = file.name;
+            const chunkSize = 5 * 1024 * 1024; // 5MB 块
+            let offset = 0,
+              carryOver = new Uint8Array(0);
             const readNextChunk = () => {
               if (offset >= file.size && carryOver.length === 0) {
-                // 文件读取完成，发送结束消息
                 worker.postMessage({ type: "finish", fileName: file.name });
                 return;
               }
-
-              const end = Math.min(offset + chunkSize, file.size); // 计算分片结束位置
-              const slice = file.slice(offset, end); // 切割文件分片
+              const end = Math.min(offset + chunkSize, file.size);
+              const slice = file.slice(offset, end);
               const reader = new FileReader();
               reader.onload = (e) => {
-                let buffer = new Uint8Array(e.target.result); // 当前分片数据
-                let combined = new Uint8Array(carryOver.length + buffer.length); // 合并剩余数据
+                let buffer = new Uint8Array(e.target.result);
+                let combined = new Uint8Array(carryOver.length + buffer.length);
                 combined.set(carryOver, 0);
                 combined.set(buffer, carryOver.length);
-
-                let localOffset = 0; // 本地偏移量，用于检查数据边界
+                let localOffset = 0;
+                // 分割完整组
                 while (localOffset + 52 <= combined.length) {
-                  // 读取 Header 中的 data_count（48 字节填充后）
                   const dataCount = new DataView(
                     combined.buffer,
                     localOffset + 48,
                     4
                   ).getInt32(0, true);
-                  const totalSize = 52 + dataCount * 2; // 完整组大小
-                  if (localOffset + totalSize > combined.length) break; // 未完整，留到下次
+                  const totalSize = 52 + dataCount * 2;
+                  if (localOffset + totalSize > combined.length) break;
                   localOffset += totalSize;
                 }
-
-                const processedLength = localOffset; // 可处理的数据长度
+                const processedLength = localOffset;
                 if (processedLength > 0) {
-                  const processedBuffer = combined.slice(0, processedLength); // 提取完整数据
+                  const processedBuffer = combined.slice(0, processedLength);
+                  console.log(
+                    `Chunk ${chunkCount} processed, size: ${processedBuffer.length} bytes`
+                  );
                   worker.postMessage(
                     {
                       type: "parse",
                       buffer: processedBuffer.buffer,
-                      offset: offset - carryOver.length, // 全局偏移量
+                      offset: offset - carryOver.length,
                       fileSize: file.size,
                     },
                     [processedBuffer.buffer]
-                  ); // 转移所有权，释放内存
+                  );
+                  chunkCount++;
                 }
-
-                carryOver = combined.slice(processedLength); // 保存剩余数据
-                offset = end; // 更新偏移量
-                readNextChunk(); // 读取下一块
+                carryOver = combined.slice(processedLength);
+                offset = end;
+                readNextChunk();
               };
               reader.readAsArrayBuffer(slice);
             };
-
             readNextChunk();
           }
         });

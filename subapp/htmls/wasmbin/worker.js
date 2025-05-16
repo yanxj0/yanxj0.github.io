@@ -1,85 +1,80 @@
-importScripts("parser.js"); // 导入 WASM 模块
+// 加载 WASM 模块
+importScripts("parser.js");
 
-let isRuntimeInitialized = false; // 标志 WASM 运行时是否初始化完成
+// 全局状态
+let isRuntimeInitialized = false; // WASM 初始化标志
+let totalOffset = 0; // 已处理字节数
+let totalGroups = 0; // 已处理组数
+let currentFileSize = 0; // 当前文件大小
+let minValue = 32767; // 最小值
+let maxValue = -32768; // 最大值
 
-// 当 WASM 运行时初始化完成时触发
+// WASM 初始化完成
 Module.onRuntimeInitialized = () => {
-  console.log("Runtime initialized successfully");
-  isRuntimeInitialized = true; // 更新初始化状态
+  isRuntimeInitialized = true;
 };
 
-// 重定向 WASM 的输出到控制台
-Module.print = (text) => console.log(text);
-Module.printErr = (text) => console.error(text);
-
-// 处理单个数据组的回调
+// 处理每组数据
 Module.onGroup = (data, index) => {
+  const values = JSON.parse(data); // 解析 JSON 数组
+  // 更新最小/最大值
+  for (let value of values) {
+    if (value < minValue) minValue = value;
+    if (value > maxValue) maxValue = value;
+  }
+  // 发送组数据和总组数
   self.postMessage({
-    type: "group", // 消息类型
-    data: data, // JSON 格式的组数据
-    total_groups: totalGroups + index + 1, // 更新全局组数
+    type: "group",
+    data,
+    total_groups: totalGroups + index + 1,
   });
+  totalGroups += 1;
 };
 
-// 处理进度更新的回调
+// 报告处理进度
 Module.onProgress = (group_count, processed_bytes) => {
-  totalOffset += processed_bytes; // 累加已处理字节数
-  totalGroups += group_count; // 累加组数
-  const progress = (totalOffset / currentFileSize) * 100; // 计算进度百分比
-  self.postMessage({
-    type: "progress",
-    progress: progress,
-  });
+  totalOffset += processed_bytes;
+  totalGroups += group_count;
+  const progress = (totalOffset / currentFileSize) * 100;
+  self.postMessage({ type: "progress", progress });
 };
 
-// 处理解析完成的回调
-Module.onComplete = (total_groups, duration) => {
+// 完成处理
+Module.onComplete = (total_groups) => {
   self.postMessage({
     type: "complete",
-    total_groups: total_groups, // 最终组数
-    duration: duration, // 处理时长（当前未使用）
+    total_groups,
+    min_value: minValue,
+    max_value: maxValue,
   });
+  // 重置状态
+  totalOffset = 0;
+  totalGroups = 0;
+  minValue = 32767;
+  maxValue = -32768;
 };
 
-let totalOffset = 0; // 全局已处理字节数
-let totalGroups = 0; // 全局总组数
-let currentOffset = 0; // 当前分片的起始偏移量
-let currentFileSize = 0; // 文件总大小
-
-// Worker 消息处理函数
+// 处理主线程消息
 self.onmessage = (e) => {
-  console.log("Message received:", e.data);
   if (e.data.type === "parse") {
-    // 处理解析请求
-    console.log(
-      "Received parse request, buffer size:",
-      e.data.buffer.byteLength,
-      "offset:",
-      e.data.offset
-    );
-    currentOffset = e.data.offset; // 更新当前偏移量
-    currentFileSize = e.data.fileSize; // 更新文件大小
+    currentFileSize = e.data.fileSize;
+    // 等待 WASM 初始化
     const waitForInitialization = () => {
       if (isRuntimeInitialized) {
-        // 运行时已初始化，开始处理
-        console.log("Starting buffer processing");
-        const uint8Array = new Uint8Array(e.data.buffer); // 创建 Uint8Array 视图
-        const dataLength = e.data.buffer.byteLength; // 分片长度
-        const inputPtr = Module._malloc(dataLength); // 分配 WASM 内存
-        Module.HEAPU8.set(uint8Array, inputPtr); // 复制数据到 WASM 堆
-
-        Module._process_segment(inputPtr, dataLength, 0); // 调用 WASM 处理函数
-
-        Module._free(inputPtr); // 释放 WASM 内存
+        const uint8Array = new Uint8Array(e.data.buffer);
+        const dataLength = e.data.buffer.byteLength;
+        // 分配 WASM 内存
+        const inputPtr = Module._malloc(dataLength);
+        Module.HEAPU8.set(uint8Array, inputPtr);
+        // 调用解析函数
+        Module._process_segment(inputPtr, dataLength, 0);
+        Module._free(inputPtr);
       } else {
-        // 等待初始化
-        console.log("Waiting for runtime initialization...");
-        setTimeout(waitForInitialization, 10); // 10ms 后重试
+        setTimeout(waitForInitialization, 10);
       }
     };
     waitForInitialization();
   } else if (e.data.type === "finish") {
-    // 处理结束消息
-    Module.onComplete(totalGroups, 0);
+    Module.onComplete(totalGroups);
   }
 };

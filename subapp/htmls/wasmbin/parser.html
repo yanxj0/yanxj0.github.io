@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Base-58 Parser</title>
+  </head>
+  <body>
+    <input type="file" id="fileInput" />
+    <div id="progress"></div>
+    <script src="parser.js"></script>
+    <script>
+      // WASM 模块
+      let wasmModule = Module;
+      let groupsProcessed = 0; // 已处理组数
+
+      // 解析 Base-58 压缩 .bin 文件
+      function parseBase58Bin(file, callback) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const buffer = e.target.result;
+          const data = new Uint8Array(buffer);
+          const groups = [];
+          let offset = 0;
+
+          // 遍历文件，动态处理所有组
+          while (offset < data.length) {
+            // 验证头部
+            if (offset + 52 > data.length) {
+              console.error("Incomplete header at offset", offset);
+              break;
+            }
+            const header = data.slice(offset, offset + 52);
+            const dataCount = new DataView(header.buffer, 48, 4).getInt32(
+              0,
+              true
+            );
+            offset += 52;
+
+            // 验证压缩数据
+            if (offset + dataCount > data.length) {
+              console.error("Incomplete data at offset", offset);
+              break;
+            }
+            const compressedData = data.slice(offset, offset + dataCount);
+            offset += dataCount;
+
+            // 分配 WASM 内存
+            const compressedPtr = wasmModule._malloc(compressedData.length);
+            wasmModule.HEAPU8.set(compressedData, compressedPtr);
+            const outputCountPtr = wasmModule._malloc(4);
+            // 解析 Base-58 数据
+            const valuesPtr = wasmModule._parse_base58_bin(
+              compressedPtr,
+              compressedData.length,
+              outputCountPtr
+            );
+            const outputCount = wasmModule.HEAP32[outputCountPtr / 4];
+
+            // 验证输出
+            if (valuesPtr === 0 || outputCount !== 118801) {
+              wasmModule._free(compressedPtr);
+              wasmModule._free(outputCountPtr);
+              console.error(
+                `Error parsing group ${groups.length}: Invalid output`
+              );
+              break;
+            }
+
+            // 复制值
+            const values = new Int16Array(
+              wasmModule.HEAP16.subarray(
+                valuesPtr / 2,
+                valuesPtr / 2 + outputCount
+              )
+            );
+            groups.push(Array.from(values));
+            // 释放 WASM 内存
+            wasmModule._free_values(valuesPtr);
+            wasmModule._free(compressedPtr);
+            wasmModule._free(outputCountPtr);
+
+            groupsProcessed++;
+            document.getElementById(
+              "progress"
+            ).textContent = `Progress: ${groupsProcessed} groups processed`;
+          }
+
+          // 调试：检查每组
+          for (let i = 0; i < groups.length; i++) {
+            console.log(
+              `Group ${i}: ${groups[i].length} values, min: ${Math.min(
+                ...groups[i]
+              )}, max: ${Math.max(...groups[i])}`
+            );
+          }
+
+          callback(groups);
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      // 处理文件输入
+      document
+        .getElementById("fileInput")
+        .addEventListener("change", (event) => {
+          const file = event.target.files[0];
+          if (file) {
+            const start = performance.now();
+            parseBase58Bin(file, (groups) => {
+              console.log("Parse time:", performance.now() - start, "ms");
+              console.log("Parsed groups:", groups.length);
+              console.log(
+                "First group values (first 10):",
+                groups[0].slice(0, 10)
+              );
+              console.log(
+                "Total data points:",
+                groups.reduce((sum, g) => sum + g.length, 0)
+              );
+
+              // 计算最小/最大值
+              let minValue = 32767,
+                maxValue = -32768;
+              for (const group of groups) {
+                for (const value of group) {
+                  if (value < minValue) minValue = value;
+                  if (value > maxValue) maxValue = value;
+                }
+              }
+              console.log("Min value:", minValue);
+              console.log("Max value:", maxValue);
+
+              // 生成紧凑 JSON
+              const groupStrings = groups.map((g) => "[" + g.join(",") + "]");
+              const jsonContent = "[" + groupStrings.join(",") + "]";
+              const jsonBlob = new Blob([jsonContent], {
+                type: "application/json",
+              });
+              const jsonUrl = URL.createObjectURL(jsonBlob);
+              const jsonA = document.createElement("a");
+              jsonA.href = jsonUrl;
+              jsonA.download = `${file.name}_decompressed.json`;
+              document.body.appendChild(jsonA);
+              jsonA.click();
+              document.body.removeChild(jsonA);
+              URL.revokeObjectURL(jsonUrl);
+            });
+          }
+        });
+    </script>
+  </body>
+</html>
